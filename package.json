@@ -4,6 +4,14 @@
   "type": "module",
   "description": "File-system routing for APIs. Drop a file, get an endpoint.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/localhost-inc/routed.git"
+  },
+  "homepage": "https://github.com/localhost-inc/routed#readme",
+  "bugs": {
+    "url": "https://github.com/localhost-inc/routed/issues"
+  },
   "exports": {
     ".": {
       "bun": "./src/index.ts",
