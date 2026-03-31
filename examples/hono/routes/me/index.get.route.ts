@@ -1,4 +1,4 @@
-import { createRoute } from "routed";
+import { createRoute } from "routedjs";
 import { auth } from "../../middleware/auth.ts";
 
 export default createRoute({

@@ -1,5 +1,6 @@
 import Elysia from "elysia";
 import type { Context as ElysiaContext } from "elysia";
+import { composeRouteHandler, type RoutedMiddleware } from "../core/compose.ts";
 import { BaseRouteContext } from "../core/context.ts";
 import { RouteError } from "../core/error.ts";
 import { validateSchema } from "../core/validate.ts";
@@ -16,18 +17,71 @@ import type {
 // ---------------------------------------------------------------------------
 
 class ElysiaRouteContext extends BaseRouteContext {
-  readonly request: Request;
   readonly method: string;
   readonly path: string;
   readonly raw: ElysiaContext;
+  private readonly requestUrl: string;
+  private readonly requestHeaders: Headers;
+  private readonly requestBody: RequestBody | undefined;
+  private requestCache?: Request;
 
   constructor(elysiaCtx: ElysiaContext) {
     super();
-    this.request = elysiaCtx.request;
     this.method = elysiaCtx.request.method;
     this.path = new URL(elysiaCtx.request.url).pathname;
     this.raw = elysiaCtx;
+    this.requestUrl = elysiaCtx.request.url;
+    this.requestHeaders = elysiaCtx.request.headers;
+    this.requestBody = serializeBody(elysiaCtx.body);
   }
+
+  get request(): Request {
+    this.requestCache ??= createRequestSnapshot(
+      this.requestUrl,
+      this.method,
+      this.requestHeaders,
+      this.requestBody,
+    );
+    return this.requestCache;
+  }
+
+  override header(name: string): string | undefined {
+    return this.requestHeaders.get(name) ?? undefined;
+  }
+}
+
+type RequestBody = Exclude<RequestInit["body"], null | undefined>;
+
+function createRequestSnapshot(
+  url: string,
+  method: string,
+  headers: Headers,
+  body: RequestBody | undefined,
+): Request {
+  if (body === undefined) {
+    return new Request(url, { method, headers });
+  }
+  return new Request(url, { method, headers, body });
+}
+
+function serializeBody(body: unknown): RequestBody | undefined {
+  if (body === undefined || body === null) {
+    return undefined;
+  }
+  if (
+    typeof body === "string" ||
+    body instanceof Blob ||
+    body instanceof FormData ||
+    body instanceof URLSearchParams ||
+    body instanceof ArrayBuffer ||
+    body instanceof ReadableStream
+  ) {
+    return body;
+  }
+  if (ArrayBuffer.isView(body)) {
+    return body as unknown as RequestBody;
+  }
+  return JSON.stringify(body);
 }
 
 type CreateElysiaAppOptions = {
@@ -60,27 +114,22 @@ function registerRoute(
 ): Elysia {
   const { path: routePath, method, route, middleware: directoryMiddleware } = entry;
 
-  const chain: MiddlewareDefinition[] = [
+  const chain: RoutedMiddleware<ElysiaRouteContext>[] = [
     ...globalMiddleware,
     ...directoryMiddleware,
     ...route.middleware,
-  ];
+  ].map(toRoutedMiddleware);
+  const execute = composeRouteHandler(
+    chain,
+    async (ctx) => runHandler(route, ctx, routePath, validateResponses),
+  );
 
   const handler = async (elysiaCtx: ElysiaContext) => {
     const ctx = new ElysiaRouteContext(elysiaCtx);
 
-    const terminalHandler = async (_routeCtx: ElysiaRouteContext): Promise<unknown> => {
-      return runHandler(elysiaCtx, route, _routeCtx, routePath, validateResponses);
-    };
-
     try {
-      const result = await compose(chain, terminalHandler)(ctx);
-
-      if (result instanceof Response) {
-        return result;
-      }
-
-      return result;
+      const result = await execute(ctx);
+      return sendResult(elysiaCtx, ctx, result);
     } catch (err) {
       if (err instanceof RouteError) {
         elysiaCtx.set.status = err.status;
@@ -98,34 +147,14 @@ function registerRoute(
 }
 
 // ---------------------------------------------------------------------------
-// Compose
+// Middleware
 // ---------------------------------------------------------------------------
 
-function compose(
-  middlewares: MiddlewareDefinition[],
-  handler: (ctx: ElysiaRouteContext) => Promise<unknown>,
-): (ctx: ElysiaRouteContext) => Promise<unknown> {
-  return async (ctx) => {
-    let index = -1;
-
-    async function dispatch(i: number): Promise<unknown> {
-      if (i <= index) throw new Error("next() called multiple times");
-      index = i;
-
-      if (i >= middlewares.length) return handler(ctx);
-
-      let handlerResult: unknown;
-      const mwResult = await middlewares[i]!.handler({
-        ctx,
-        next: async () => {
-          handlerResult = await dispatch(i + 1);
-          return handlerResult;
-        },
-      });
-      return mwResult !== undefined ? mwResult : handlerResult;
-    }
-
-    return dispatch(0);
+function toRoutedMiddleware(
+  middleware: MiddlewareDefinition,
+): RoutedMiddleware<ElysiaRouteContext> {
+  return async (ctx, next) => {
+    return middleware.handler({ ctx, next });
   };
 }
 
@@ -134,20 +163,19 @@ function compose(
 // ---------------------------------------------------------------------------
 
 async function runHandler(
-  elysiaCtx: ElysiaContext,
   route: RouteDefinition<RouteSchemas>,
   ctx: ElysiaRouteContext,
   routePath: string,
   validateResponses: boolean,
 ): Promise<unknown> {
   const { schemas } = route;
+  const elysiaCtx = ctx.raw;
 
   let params: unknown;
   if (schemas.params) {
     const result = await validateSchema(schemas.params, elysiaCtx.params);
     if (!result.success) {
-      elysiaCtx.set.status = 400;
-      return { error: "Validation failed", target: "params", issues: result.issues };
+      return ctx.json({ error: "Validation failed", target: "params", issues: result.issues }, 400);
     }
     params = result.data;
   }
@@ -156,8 +184,7 @@ async function runHandler(
   if (schemas.query) {
     const result = await validateSchema(schemas.query, elysiaCtx.query);
     if (!result.success) {
-      elysiaCtx.set.status = 400;
-      return { error: "Validation failed", target: "query", issues: result.issues };
+      return ctx.json({ error: "Validation failed", target: "query", issues: result.issues }, 400);
     }
     query = result.data;
   }
@@ -174,8 +201,7 @@ async function runHandler(
     }
     const result = await validateSchema(schemas.body, rawBody);
     if (!result.success) {
-      elysiaCtx.set.status = 400;
-      return { error: "Validation failed", target: "body", issues: result.issues };
+      return ctx.json({ error: "Validation failed", target: "body", issues: result.issues }, 400);
     }
     body = result.data;
   }
@@ -196,4 +222,31 @@ async function runHandler(
   }
 
   return handlerResult;
+}
+
+function sendResult(
+  elysiaCtx: ElysiaContext,
+  ctx: ElysiaRouteContext,
+  result: unknown,
+): unknown {
+  if (result instanceof Response) {
+    return result;
+  }
+
+  if (result === undefined) {
+    const headers = ctx.getBufferedHeaders();
+    return new Response(null, {
+      status: ctx.getBufferedStatus(),
+      headers,
+    });
+  }
+
+  if (ctx.hasBufferedResponseInit()) {
+    elysiaCtx.set.status = ctx.getBufferedStatus();
+    ctx.forEachBufferedHeader((value, key) => {
+      elysiaCtx.set.headers[key] = value;
+    });
+  }
+
+  return result;
 }

@@ -177,6 +177,16 @@ describe("RouteContext", () => {
     expect(res.headers.get("location")).toBe("https://example.com");
   });
 
+  test("redirect() preserves buffered headers and status", () => {
+    const ctx = new TestRouteContext();
+    ctx.status(307);
+    ctx.setHeader("x-custom", "value");
+    const res = ctx.redirect("https://example.com");
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("https://example.com");
+    expect(res.headers.get("x-custom")).toBe("value");
+  });
+
   test("status() sets default status for json/text", async () => {
     const ctx = new TestRouteContext();
     ctx.status(404);

@@ -1,4 +1,4 @@
-import { createExpressApp } from "routed/express";
+import { createExpressApp } from "routedjs/express";
 import { routeTree } from "./routed.gen.ts";
 
 const app = createExpressApp(routeTree);

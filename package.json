@@ -1,16 +1,16 @@
 {
-  "name": "routed",
+  "name": "routedjs",
   "version": "0.0.1",
   "type": "module",
   "description": "File-system routing for APIs. Drop a file, get an endpoint.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/localhost-inc/routed.git"
+    "url": "git+https://github.com/localhost-inc/routedjs.git"
   },
-  "homepage": "https://github.com/localhost-inc/routed#readme",
+  "homepage": "https://github.com/localhost-inc/routedjs#readme",
   "bugs": {
-    "url": "https://github.com/localhost-inc/routed/issues"
+    "url": "https://github.com/localhost-inc/routedjs/issues"
   },
   "exports": {
     ".": {
@@ -64,11 +64,13 @@
     }
   },
   "bin": {
-    "routed": "./src/cli/index.ts"
+    "routed": "./bin/routed"
   },
   "files": [
+    "bin",
     "dist",
     "src",
+    "!src/**/*.test.ts",
     "README.md",
     "LICENSE"
   ],

@@ -1,4 +1,4 @@
-import { createMiddleware, RouteError } from "routed";
+import { createMiddleware, RouteError } from "routedjs";
 
 type User = { id: string; name: string; role: string };
 

@@ -1,8 +1,14 @@
 import Koa from "koa";
 import type { Context as KoaContext } from "koa";
+import { composeRouteHandler, type RoutedMiddleware } from "../core/compose.ts";
 import { BaseRouteContext } from "../core/context.ts";
 import { RouteError } from "../core/error.ts";
 import { validateSchema } from "../core/validate.ts";
+import {
+  applyResponseHeaders,
+  NodeRequestState,
+  pipeResponseBody,
+} from "./node.ts";
 import type {
   MiddlewareDefinition,
   RouteDefinition,
@@ -16,31 +22,41 @@ import type {
 // ---------------------------------------------------------------------------
 
 class KoaRouteContext extends BaseRouteContext {
-  readonly request: Request;
   readonly method: string;
   readonly path: string;
+  readonly params: Record<string, string>;
   readonly raw: KoaContext;
+  private requestState?: NodeRequestState;
 
-  constructor(koaCtx: KoaContext) {
+  constructor(koaCtx: KoaContext, params: Record<string, string>) {
     super();
     this.method = koaCtx.method;
     this.path = koaCtx.path;
+    this.params = params;
     this.raw = koaCtx;
+  }
 
-    const url = `${koaCtx.protocol}://${koaCtx.host}${koaCtx.originalUrl ?? koaCtx.url}`;
-    const headers = new Headers();
-    for (const [key, value] of Object.entries(koaCtx.headers)) {
-      if (value !== undefined) {
-        if (Array.isArray(value)) {
-          for (const v of value) {
-            headers.append(key, v);
-          }
-        } else {
-          headers.set(key, value);
-        }
-      }
-    }
-    this.request = new Request(url, { method: koaCtx.method, headers });
+  get request(): Request {
+    return this.getRequestState().request;
+  }
+
+  override header(name: string): string | undefined {
+    const value = this.raw.headers[name.toLowerCase()];
+    return Array.isArray(value) ? value[0] : value ?? undefined;
+  }
+
+  readJsonBody(): Promise<unknown> {
+    return this.getRequestState().readJsonBody();
+  }
+
+  private getRequestState(): NodeRequestState {
+    this.requestState ??= new NodeRequestState(
+      `${this.raw.protocol}://${this.raw.host}${this.raw.originalUrl ?? this.raw.url}`,
+      this.method,
+      this.raw.headers,
+      this.raw.req,
+    );
+    return this.requestState;
   }
 }
 
@@ -73,10 +89,22 @@ export function createKoaApp(routeTree: RouteTree, options?: CreateKoaAppOptions
   const validateResponses = options?.validateResponses ?? false;
   const globalMiddleware = options?.middleware ?? [];
 
-  const routes = routeTree.map((entry) => ({
-    ...entry,
-    pattern: compilePattern(entry.path),
-  }));
+  const routes = routeTree.map((entry) => {
+    const chain: RoutedMiddleware<KoaRouteContext>[] = [
+      ...globalMiddleware,
+      ...entry.middleware,
+      ...entry.route.middleware,
+    ].map(toRoutedMiddleware);
+
+    return {
+      ...entry,
+      pattern: compilePattern(entry.path),
+      execute: composeRouteHandler(
+        chain,
+        createTerminalHandler(entry.route, entry.path, validateResponses),
+      ),
+    };
+  });
 
   app.use(async (koaCtx, next) => {
     const method = koaCtx.method.toLowerCase();
@@ -88,7 +116,20 @@ export function createKoaApp(routeTree: RouteTree, options?: CreateKoaAppOptions
       const params = route.pattern(pathname);
       if (!params) continue;
 
-      await executeRoute(koaCtx, route, params, validateResponses, globalMiddleware);
+      const routeCtx = new KoaRouteContext(koaCtx, params);
+      setRouteCtx(koaCtx, routeCtx);
+
+      try {
+        const result = await route.execute(routeCtx);
+        await sendResult(koaCtx, routeCtx, result);
+      } catch (err) {
+        if (err instanceof RouteError) {
+          koaCtx.status = err.status;
+          koaCtx.body = { error: err.message, ...(err.data ? { data: err.data } : {}) };
+          return;
+        }
+        throw err;
+      }
       return;
     }
 
@@ -135,119 +176,30 @@ function escapeRegex(str: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Route execution
+// Middleware
 // ---------------------------------------------------------------------------
 
-async function executeRoute(
-  koaCtx: KoaContext,
-  entry: RouteEntry & { pattern: PatternMatcher },
-  params: Record<string, string>,
-  validateResponses: boolean,
-  globalMiddleware: MiddlewareDefinition<any>[],
-) {
-  const { route, middleware: directoryMiddleware } = entry;
-
-  const routeCtx = new KoaRouteContext(koaCtx);
-  setRouteCtx(koaCtx, routeCtx);
-
-  const chain: RoutedMiddleware[] = [];
-
-  for (const mw of globalMiddleware) {
-    chain.push(toRoutedMiddleware(mw));
-  }
-
-  for (const mw of directoryMiddleware) {
-    chain.push(toRoutedMiddleware(mw));
-  }
-
-  for (const mw of route.middleware) {
-    chain.push(toRoutedMiddleware(mw));
-  }
-
-  const terminalHandler = createTerminalHandler(koaCtx, route, params, entry.path, validateResponses);
-
-  try {
-    const result = await compose(chain, terminalHandler)(routeCtx);
-
-    if (result instanceof Response) {
-      koaCtx.status = result.status;
-      const ct = result.headers.get("content-type") ?? "";
-      if (ct.includes("application/json")) {
-        koaCtx.body = await result.json();
-      } else {
-        koaCtx.body = await result.text();
-      }
-    } else {
-      koaCtx.status = 200;
-      koaCtx.body = result;
-    }
-  } catch (err) {
-    if (err instanceof RouteError) {
-      koaCtx.status = err.status;
-      koaCtx.body = { error: err.message, ...(err.data ? { data: err.data } : {}) };
-      return;
-    }
-    throw err;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Compose
-// ---------------------------------------------------------------------------
-
-type RoutedMiddleware = (
-  ctx: KoaRouteContext,
-  next: () => Promise<unknown>,
-) => unknown | Promise<unknown>;
-
-function toRoutedMiddleware(mw: MiddlewareDefinition): RoutedMiddleware {
+function toRoutedMiddleware(
+  mw: MiddlewareDefinition,
+): RoutedMiddleware<KoaRouteContext> {
   return async (ctx, next) => {
     return mw.handler({ ctx, next });
   };
 }
 
-function compose(
-  middlewares: RoutedMiddleware[],
-  handler: (ctx: KoaRouteContext) => unknown | Promise<unknown>,
-): (ctx: KoaRouteContext) => Promise<unknown> {
-  return async (ctx: KoaRouteContext) => {
-    let index = -1;
-
-    async function dispatch(i: number): Promise<unknown> {
-      if (i <= index) throw new Error("next() called multiple times");
-      index = i;
-
-      if (i === middlewares.length) {
-        return handler(ctx);
-      }
-
-      const mw = middlewares[i]!;
-      let downstreamResult: unknown;
-      const result = await mw(ctx, async () => {
-        downstreamResult = await dispatch(i + 1);
-        return downstreamResult;
-      });
-      return result !== undefined ? result : downstreamResult;
-    }
-
-    return dispatch(0);
-  };
-}
-
 function createTerminalHandler(
-  koaCtx: KoaContext,
   route: RouteDefinition<RouteSchemas>,
-  rawParams: Record<string, string>,
   routePath: string,
   validateResponses: boolean,
 ): (ctx: KoaRouteContext) => Promise<unknown> {
   return async (ctx) => {
     const { schemas } = route;
+    const koaCtx = ctx.raw;
 
     // Validate params
     let params: unknown;
     if (schemas.params) {
-      const result = await validateSchema(schemas.params, rawParams);
+      const result = await validateSchema(schemas.params, ctx.params);
       if (!result.success) {
         return validationErrorResponse("params", result.issues);
       }
@@ -267,8 +219,7 @@ function createTerminalHandler(
     // Validate body
     let body: unknown;
     if (schemas.body) {
-      const rawBody = await readJsonBody(koaCtx);
-      const result = await validateSchema(schemas.body, rawBody);
+      const result = await validateSchema(schemas.body, await ctx.readJsonBody());
       if (!result.success) {
         return validationErrorResponse("body", result.issues);
       }
@@ -301,23 +252,48 @@ function validationErrorResponse(target: string, issues: readonly unknown[]): Re
   );
 }
 
+async function sendResponse(koaCtx: KoaContext, response: Response): Promise<void> {
+  koaCtx.respond = false;
+  koaCtx.res.statusCode = response.status;
+  applyResponseHeaders(response, (name, value) => {
+    koaCtx.res.setHeader(name, value);
+  });
+  await pipeResponseBody(response, koaCtx.res);
+}
+
+async function sendResult(
+  koaCtx: KoaContext,
+  ctx: KoaRouteContext,
+  result: unknown,
+): Promise<void> {
+  if (result instanceof Response) {
+    await sendResponse(koaCtx, result);
+    return;
+  }
+
+  if (result === undefined) {
+    if (ctx.hasBufferedResponseInit()) {
+      koaCtx.status = ctx.getBufferedStatus();
+      ctx.forEachBufferedHeader((value, key) => {
+        koaCtx.set(key, value);
+      });
+    } else {
+      koaCtx.status = 200;
+    }
+    koaCtx.body = null;
+    return;
+  }
+
+  if (ctx.hasBufferedResponseInit()) {
+    koaCtx.status = ctx.getBufferedStatus();
+    ctx.forEachBufferedHeader((value, key) => {
+      koaCtx.set(key, value);
+    });
+  }
+
+  koaCtx.body = result;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-async function readJsonBody(ctx: KoaContext): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    ctx.req.on("data", (chunk: Buffer) => {
-      data += chunk.toString();
-    });
-    ctx.req.on("end", () => {
-      try {
-        resolve(data ? JSON.parse(data) : null);
-      } catch {
-        resolve(null);
-      }
-    });
-    ctx.req.on("error", reject);
-  });
-}

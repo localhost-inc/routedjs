@@ -1,5 +1,8 @@
+import { createRequire } from "node:module";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { RouteEntry, RouteTree } from "../core/types.ts";
+
+const require = createRequire(import.meta.url);
 
 // ---------------------------------------------------------------------------
 // Public API

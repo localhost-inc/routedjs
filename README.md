@@ -21,7 +21,7 @@ routes/
 ## Install
 
 ```bash
-bun add routed
+bun add routedjs
 # + your framework + your validator
 bun add hono    # or koa, express, elysia
 bun add zod     # or valibot, arktype, or any Standard Schema validator
@@ -33,7 +33,7 @@ bun add zod     # or valibot, arktype, or any Standard Schema validator
 
 ```ts
 // routes/users/$userId.get.route.ts
-import { createRoute } from "routed";
+import { createRoute } from "routedjs";
 import { z } from "zod";
 
 export default createRoute({
@@ -52,7 +52,7 @@ No `method`. No `path`. Both are derived from the filename and location.
 
 ```ts
 // routed.config.ts
-import { defineConfig } from "routed";
+import { defineConfig } from "routedjs";
 
 export default defineConfig({
   routesDir: "./routes",
@@ -73,7 +73,7 @@ This scans your routes directory and writes `routed.gen.ts` — a framework-agno
 
 ```ts
 // routed.gen.ts (auto-generated)
-import { defineRouteTree } from "routed";
+import { defineRouteTree } from "routedjs";
 import route0 from "./routes/users/$userId.get.route.ts";
 
 export const routeTree = defineRouteTree([
@@ -87,7 +87,7 @@ Pick an adapter and create your server:
 
 ```ts
 // server.ts
-import { createHonoApp } from "routed/hono";
+import { createHonoApp } from "routedjs/hono";
 import { routeTree } from "./routed.gen";
 
 const app = createHonoApp(routeTree);
@@ -95,7 +95,7 @@ const app = createHonoApp(routeTree);
 export default { fetch: app.fetch, port: 3000 };
 ```
 
-That's it. The same route files work with any adapter — swap `routed/hono` for `routed/koa`, `routed/express`, or `routed/elysia` and nothing else changes.
+That's it. The same route files work with any adapter — swap `routedjs/hono` for `routedjs/koa`, `routedjs/express`, or `routedjs/elysia` and nothing else changes.
 
 ## File conventions
 
@@ -117,7 +117,7 @@ Supported methods: `get`, `post`, `put`, `patch`, `delete`
 
 ```ts
 // routes/users/$userId.get.route.ts
-import { createRoute } from "routed";
+import { createRoute } from "routedjs";
 import { authMiddleware } from "../_middleware";
 
 export default createRoute({
@@ -132,7 +132,7 @@ Create a `_middleware.ts` in any directory. It applies to all routes in that dir
 
 ```ts
 // routes/users/_middleware.ts
-import { createMiddleware } from "routed";
+import { createMiddleware } from "routedjs";
 
 export default createMiddleware(async ({ ctx, next }) => {
   console.log("runs before all /users/* routes");
@@ -163,6 +163,38 @@ export default createRoute({
 });
 ```
 
+## Route context
+
+Handlers and middleware receive a framework-agnostic `ctx`:
+
+- `ctx.request`: standard Web `Request`
+- `ctx.status(code)` and `ctx.setHeader(name, value)`: set status/headers for plain-object returns
+- `ctx.json(...)`, `ctx.text(...)`, `ctx.redirect(...)`: return a `Response` directly
+- `ctx.raw`: underlying framework request/response context
+
+```ts
+export default createRoute({
+  handler: async ({ ctx }) => {
+    ctx.status(201);
+    ctx.setHeader("x-created", "yes");
+    return { ok: true };
+  },
+});
+```
+
+`ctx.request` works the same way across adapters, including request-body reads:
+
+```ts
+export default createRoute({
+  handler: async ({ ctx }) => {
+    const bodyText = await ctx.request.text();
+    return ctx.text(bodyText);
+  },
+});
+```
+
+If you need full control, return a raw `Response`. Status, headers, binary bodies, redirects, and streaming responses pass through unchanged.
+
 ## Adapters
 
 Routed ships adapters for four frameworks. The route tree is framework-agnostic — adapters translate it into framework-specific registration.
@@ -170,7 +202,7 @@ Routed ships adapters for four frameworks. The route tree is framework-agnostic 
 ### Hono
 
 ```ts
-import { createHonoApp } from "routed/hono";
+import { createHonoApp } from "routedjs/hono";
 const app = createHonoApp(routeTree);
 export default { fetch: app.fetch, port: 3000 };
 ```
@@ -178,7 +210,7 @@ export default { fetch: app.fetch, port: 3000 };
 ### Koa
 
 ```ts
-import { createKoaApp } from "routed/koa";
+import { createKoaApp } from "routedjs/koa";
 const app = createKoaApp(routeTree);
 app.listen(3000);
 ```
@@ -186,7 +218,7 @@ app.listen(3000);
 ### Express
 
 ```ts
-import { createExpressApp } from "routed/express";
+import { createExpressApp } from "routedjs/express";
 const app = createExpressApp(routeTree);
 app.listen(3000);
 ```
@@ -194,7 +226,7 @@ app.listen(3000);
 ### Elysia
 
 ```ts
-import { createElysiaApp } from "routed/elysia";
+import { createElysiaApp } from "routedjs/elysia";
 const app = createElysiaApp(routeTree);
 app.listen(3000);
 ```
@@ -245,11 +277,37 @@ When enabled, if a handler returns data that doesn't match the response schema, 
 Routed generates OpenAPI 3.1 specs from your route schemas and metadata:
 
 ```ts
-import { generateOpenAPISpec } from "routed/openapi";
+import { generateOpenAPISpec } from "routedjs/openapi";
 
 const spec = generateOpenAPISpec(routeTree, {
   info: { title: "My API", version: "1.0.0" },
 });
+```
+
+OpenAPI metadata lives on `meta` in `createRoute`, including `summary`, `description`, `tags`, `deprecated`, and `operationId`.
+
+```ts
+import { createRoute } from "routedjs";
+import { z } from "zod";
+
+export default createRoute({
+  meta: {
+    summary: "Get user by ID",
+    tags: ["users"],
+    operationId: "getUser",
+  },
+  schemas: {
+    params: z.object({ userId: z.string().uuid() }),
+    response: z.object({ id: z.string(), name: z.string() }),
+  },
+  handler: async ({ params }) => ({ id: params.userId, name: "Kyle" }),
+});
+```
+
+If you're using Zod schemas for OpenAPI generation, install `zod-to-json-schema` as well:
+
+```bash
+bun add zod-to-json-schema
 ```
 
 Or from the CLI — add `openapi` to your config:

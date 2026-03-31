@@ -1,4 +1,4 @@
-import { createHonoApp } from "routed/hono";
+import { createHonoApp } from "routedjs/hono";
 import { routeTree } from "./routed.gen.ts";
 
 const app = createHonoApp(routeTree);

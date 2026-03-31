@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import path from "node:path";
 import { z } from "zod";
 import { createRoute } from "../core/create-route.ts";
 import { createMiddleware } from "../core/create-middleware.ts";
@@ -170,5 +171,62 @@ describe("generateOpenAPISpec", () => {
   test("marks deprecated routes", () => {
     const legacy = spec.paths["/legacy/endpoint"]!.get as Record<string, unknown>;
     expect(legacy.deprecated).toBe(true);
+  });
+
+  test("built Node ESM output preserves Zod schemas", async () => {
+    const repoRoot = path.resolve(import.meta.dir, "../..");
+
+    const build = Bun.spawn([process.execPath, "run", "build"], {
+      cwd: repoRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const buildExitCode = await build.exited;
+    const buildStderr = await new Response(build.stderr).text();
+    expect(buildExitCode, buildStderr).toBe(0);
+
+    const nodeScript = `
+      import { generateOpenAPISpec } from "./dist/openapi/index.js";
+      import { z } from "zod";
+
+      const spec = generateOpenAPISpec([
+        {
+          path: "/users/:userId",
+          method: "get",
+          route: {
+            schemas: {
+              params: z.object({ userId: z.string().uuid() }),
+              response: z.object({ id: z.string() }),
+            },
+            middleware: [],
+            handler: () => ({ id: "1" }),
+          },
+          middleware: [],
+        },
+      ], {
+        info: { title: "Test API", version: "1.0.0" },
+      });
+
+      console.log(JSON.stringify(spec));
+    `;
+
+    const run = Bun.spawn(["node", "--input-type=module", "-e", nodeScript], {
+      cwd: repoRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const runExitCode = await run.exited;
+    const runStderr = await new Response(run.stderr).text();
+    expect(runExitCode, runStderr).toBe(0);
+
+    const output = await new Response(run.stdout).text();
+    const builtSpec = JSON.parse(output) as {
+      paths: Record<string, Record<string, { parameters?: Array<{ schema?: Record<string, unknown> }>; responses: Record<string, { content?: Record<string, unknown> }> }>>;
+    };
+
+    const getUser = builtSpec.paths["/users/{userId}"]!.get!;
+    expect(getUser.parameters?.[0]?.schema?.type).toBe("string");
+    expect(getUser.parameters?.[0]?.schema?.format).toBe("uuid");
+    expect(getUser.responses["200"]?.content?.["application/json"]).toBeDefined();
   });
 });

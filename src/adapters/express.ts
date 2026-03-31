@@ -6,9 +6,15 @@ import type {
   RequestHandler,
   Application,
 } from "express";
+import { composeRouteHandler, type RoutedMiddleware } from "../core/compose.ts";
 import { BaseRouteContext } from "../core/context.ts";
 import { RouteError } from "../core/error.ts";
 import { validateSchema } from "../core/validate.ts";
+import {
+  applyResponseHeaders,
+  NodeRequestState,
+  pipeResponseBody,
+} from "./node.ts";
 import type {
   MiddlewareDefinition,
   RouteDefinition,
@@ -22,31 +28,39 @@ import type {
 // ---------------------------------------------------------------------------
 
 class ExpressRouteContext extends BaseRouteContext {
-  readonly request: globalThis.Request;
   readonly method: string;
   readonly path: string;
   readonly raw: { req: ExpressRequest; res: ExpressResponse };
+  private requestState?: NodeRequestState;
 
   constructor(req: ExpressRequest, res: ExpressResponse) {
     super();
-    const url = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
-    const headers = new Headers();
-    for (const [key, value] of Object.entries(req.headers)) {
-      if (value !== undefined) {
-        if (Array.isArray(value)) {
-          for (const v of value) headers.append(key, v);
-        } else {
-          headers.set(key, value);
-        }
-      }
-    }
-    this.request = new globalThis.Request(url, {
-      method: req.method,
-      headers,
-    });
     this.method = req.method;
     this.path = req.path;
     this.raw = { req, res };
+  }
+
+  get request(): globalThis.Request {
+    return this.getRequestState().request;
+  }
+
+  override header(name: string): string | undefined {
+    const value = this.raw.req.headers[name.toLowerCase()];
+    return Array.isArray(value) ? value[0] : value ?? undefined;
+  }
+
+  readJsonBody(): Promise<unknown> {
+    return this.getRequestState().readJsonBody();
+  }
+
+  private getRequestState(): NodeRequestState {
+    this.requestState ??= new NodeRequestState(
+      `${this.raw.req.protocol}://${this.raw.req.get("host")}${this.raw.req.originalUrl}`,
+      this.method,
+      this.raw.req.headers,
+      this.raw.req,
+    );
+    return this.requestState;
   }
 }
 
@@ -69,8 +83,6 @@ export function createExpressApp(routeTree: RouteTree, options?: CreateExpressAp
   const validateResponses = options?.validateResponses ?? false;
   const globalMiddleware = options?.middleware ?? [];
 
-  app.use(express.json());
-
   for (const entry of routeTree) {
     registerRoute(app, entry, validateResponses, globalMiddleware);
   }
@@ -89,24 +101,23 @@ function registerRoute(
   globalMiddleware: MiddlewareDefinition<any>[],
 ) {
   const { path: routePath, method, route, middleware: directoryMiddleware } = entry;
+  const chain: RoutedMiddleware<ExpressRouteContext>[] = [
+    ...globalMiddleware,
+    ...directoryMiddleware,
+    ...route.middleware,
+  ].map(toRoutedMiddleware);
+  const execute = composeRouteHandler(
+    chain,
+    async (routeCtx) => runHandler(route, routeCtx, routePath, method, validateResponses),
+  );
 
   const handler: RequestHandler = async (req, res, next) => {
     const ctx = new ExpressRouteContext(req, res);
 
-    const chain: MiddlewareDefinition[] = [
-      ...globalMiddleware,
-      ...directoryMiddleware,
-      ...route.middleware,
-    ];
-
-    const terminalHandler = async (routeCtx: ExpressRouteContext): Promise<unknown> => {
-      return runHandler(req, route, routeCtx, routePath, method, validateResponses);
-    };
-
     try {
-      const result = await compose(chain, terminalHandler)(ctx);
+      const result = await execute(ctx);
       if (!res.headersSent) {
-        await sendResult(res, result);
+        await sendResult(res, ctx, result);
       }
     } catch (err) {
       if (err instanceof RouteError) {
@@ -126,34 +137,14 @@ function registerRoute(
 }
 
 // ---------------------------------------------------------------------------
-// Compose
+// Middleware
 // ---------------------------------------------------------------------------
 
-function compose(
-  middlewares: MiddlewareDefinition[],
-  handler: (ctx: ExpressRouteContext) => Promise<unknown>,
-): (ctx: ExpressRouteContext) => Promise<unknown> {
-  return async (ctx) => {
-    let index = -1;
-
-    async function dispatch(i: number): Promise<unknown> {
-      if (i <= index) throw new Error("next() called multiple times");
-      index = i;
-
-      if (i >= middlewares.length) return handler(ctx);
-
-      let handlerResult: unknown;
-      const mwResult = await middlewares[i]!.handler({
-        ctx,
-        next: async () => {
-          handlerResult = await dispatch(i + 1);
-          return handlerResult;
-        },
-      });
-      return mwResult !== undefined ? mwResult : handlerResult;
-    }
-
-    return dispatch(0);
+function toRoutedMiddleware(
+  middleware: MiddlewareDefinition,
+): RoutedMiddleware<ExpressRouteContext> {
+  return async (ctx, next) => {
+    return middleware.handler({ ctx, next });
   };
 }
 
@@ -161,21 +152,43 @@ function compose(
 // Send result as response
 // ---------------------------------------------------------------------------
 
-async function sendResult(res: ExpressResponse, result: unknown): Promise<void> {
+async function sendResult(
+  res: ExpressResponse,
+  ctx: ExpressRouteContext,
+  result: unknown,
+): Promise<void> {
   if (result instanceof Response) {
-    result.headers.forEach((value, key) => {
+    await sendResponse(res, result);
+    return;
+  }
+
+  if (result === undefined) {
+    if (ctx.hasBufferedResponseInit()) {
+      res.status(ctx.getBufferedStatus());
+      ctx.forEachBufferedHeader((value, key) => {
+        res.setHeader(key, value);
+      });
+    }
+    res.end();
+    return;
+  }
+
+  if (ctx.hasBufferedResponseInit()) {
+    res.status(ctx.getBufferedStatus());
+    ctx.forEachBufferedHeader((value, key) => {
       res.setHeader(key, value);
     });
-    const text = await result.text();
-    res.status(result.status);
-    if (result.headers.get("content-type")?.includes("application/json")) {
-      res.json(JSON.parse(text));
-    } else {
-      res.send(text);
-    }
-  } else if (result !== undefined) {
-    res.json(result);
   }
+
+  res.json(result);
+}
+
+async function sendResponse(res: ExpressResponse, response: Response): Promise<void> {
+  res.status(response.status);
+  applyResponseHeaders(response, (name, value) => {
+    res.setHeader(name, value);
+  });
+  await pipeResponseBody(response, res);
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +196,6 @@ async function sendResult(res: ExpressResponse, result: unknown): Promise<void> 
 // ---------------------------------------------------------------------------
 
 async function runHandler(
-  req: ExpressRequest,
   route: RouteDefinition<RouteSchemas>,
   ctx: ExpressRouteContext,
   routePath: string,
@@ -191,6 +203,7 @@ async function runHandler(
   validateResponses: boolean,
 ): Promise<unknown> {
   const { schemas } = route;
+  const req = ctx.raw.req;
 
   let params: unknown;
   if (schemas.params) {
@@ -218,12 +231,9 @@ async function runHandler(
 
   let body: unknown;
   if (schemas.body) {
-    const result = await validateSchema(schemas.body, req.body);
+    const result = await validateSchema(schemas.body, await ctx.readJsonBody());
     if (!result.success) {
-      return new Response(
-        JSON.stringify({ error: "Validation failed", target: "body", issues: result.issues }),
-        { status: 400, headers: { "content-type": "application/json" } },
-      );
+      return ctx.json({ error: "Validation failed", target: "body", issues: result.issues }, 400);
     }
     body = result.data;
   }

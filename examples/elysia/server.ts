@@ -1,4 +1,4 @@
-import { createElysiaApp } from "routed/elysia";
+import { createElysiaApp } from "routedjs/elysia";
 import { routeTree } from "./routed.gen.ts";
 
 const app = createElysiaApp(routeTree);

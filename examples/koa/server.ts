@@ -1,4 +1,4 @@
-import { createKoaApp } from "routed/koa";
+import { createKoaApp } from "routedjs/koa";
 import { routeTree } from "./routed.gen.ts";
 
 const app = createKoaApp(routeTree);

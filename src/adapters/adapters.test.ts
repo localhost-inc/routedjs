@@ -28,6 +28,77 @@ function makeTrackingMiddleware(label: string): MiddlewareDefinition {
 const dirMw1 = makeTrackingMiddleware("dir1");
 const dirMw2 = makeTrackingMiddleware("dir2");
 const routeMw = makeTrackingMiddleware("route1");
+const encoder = new TextEncoder();
+const STREAM_DELAY_MS = 200;
+const FIRST_CHUNK_TIMEOUT_MS = 120;
+const STREAM_BINARY_CHUNK_ONE_SIZE = 128 * 1024;
+const STREAM_BINARY_CHUNK_TWO_SIZE = 96 * 1024;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function createChunkedResponse(
+  chunks: Uint8Array[],
+  headers: Record<string, string>,
+): Response {
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      async start(controller) {
+        controller.enqueue(chunks[0]!);
+        await sleep(STREAM_DELAY_MS);
+        for (const chunk of chunks.slice(1)) {
+          controller.enqueue(chunk);
+        }
+        controller.close();
+      },
+    }),
+    { headers },
+  );
+}
+
+function concatChunks(chunks: Uint8Array[]): Uint8Array {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const combined = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return combined;
+}
+
+async function readStreamWithEarlyFirstChunk(
+  response: Response,
+  timeoutMs: number,
+): Promise<Uint8Array> {
+  const body = response.body;
+  if (!body) {
+    throw new Error("Expected streaming response body");
+  }
+
+  const reader = body.getReader();
+  const firstChunk = await Promise.race([
+    reader.read(),
+    sleep(timeoutMs).then(() => null),
+  ]);
+
+  if (!firstChunk || firstChunk.done) {
+    throw new Error(`Expected first chunk within ${timeoutMs}ms`);
+  }
+
+  const chunks: Uint8Array[] = [];
+  chunks.push(firstChunk.value);
+  while (true) {
+    const part = await reader.read();
+    if (part.done) {
+      return concatChunks(chunks);
+    }
+    chunks.push(part.value);
+  }
+}
 
 function buildRouteTree(): RouteTree {
   return [
@@ -133,6 +204,102 @@ function buildRouteTree(): RouteTree {
       }),
       middleware: [dirMw1, dirMw2],
     },
+
+    {
+      path: "/created",
+      method: "post",
+      route: createRoute({
+        handler: async ({ ctx }) => {
+          ctx.status(201);
+          ctx.setHeader("x-created", "yes");
+          return { created: true };
+        },
+      }),
+      middleware: [],
+    },
+
+    {
+      path: "/redirect",
+      method: "get",
+      route: createRoute({
+        handler: async ({ ctx }) => ctx.redirect("https://example.com"),
+      }),
+      middleware: [],
+    },
+
+    {
+      path: "/binary",
+      method: "get",
+      route: createRoute({
+        handler: async () =>
+          new Response(new Uint8Array([0, 255, 1]), {
+            headers: {
+              "content-type": "application/octet-stream",
+              "x-binary": "yes",
+            },
+          }),
+      }),
+      middleware: [],
+    },
+
+    {
+      path: "/echo-body",
+      method: "post",
+      route: createRoute({
+        handler: async ({ ctx }) => ({
+          bodyText: await ctx.request.text(),
+        }),
+      }),
+      middleware: [],
+    },
+
+    {
+      path: "/stream-text",
+      method: "get",
+      route: createRoute({
+        handler: async () =>
+          createChunkedResponse(
+            [encoder.encode("hello\n"), encoder.encode("world")],
+            { "content-type": "text/plain; charset=utf-8" },
+          ),
+      }),
+      middleware: [],
+    },
+
+    {
+      path: "/stream-sse",
+      method: "get",
+      route: createRoute({
+        handler: async () =>
+          createChunkedResponse(
+            [encoder.encode("data: one\n\n"), encoder.encode("data: two\n\n")],
+            {
+              "content-type": "text/event-stream; charset=utf-8",
+              "cache-control": "no-cache",
+            },
+          ),
+      }),
+      middleware: [],
+    },
+
+    {
+      path: "/stream-binary",
+      method: "get",
+      route: createRoute({
+        handler: async () =>
+          createChunkedResponse(
+            [
+              new Uint8Array(STREAM_BINARY_CHUNK_ONE_SIZE).fill(7),
+              new Uint8Array(STREAM_BINARY_CHUNK_TWO_SIZE).fill(9),
+            ],
+            {
+              "content-type": "application/octet-stream",
+              "x-streamed": "yes",
+            },
+          ),
+      }),
+      middleware: [],
+    },
   ];
 }
 
@@ -143,19 +310,20 @@ function buildRouteTree(): RouteTree {
 type MakeRequest = (
   method: string,
   path: string,
-  options?: { body?: unknown; headers?: Record<string, string> },
+  options?: { body?: unknown; headers?: Record<string, string>; redirect?: "follow" | "manual" | "error" },
 ) => Promise<Response>;
 
 function jsonReq(
   base: string,
   method: string,
   path: string,
-  options?: { body?: unknown; headers?: Record<string, string> },
+  options?: { body?: unknown; headers?: Record<string, string>; redirect?: "follow" | "manual" | "error" },
 ): Request {
   const url = `${base}${path}`;
   const init: RequestInit = {
     method: method.toUpperCase(),
     headers: { "Content-Type": "application/json", ...options?.headers },
+    redirect: options?.redirect,
   };
   if (options?.body !== undefined) {
     init.body = JSON.stringify(options.body);
@@ -368,6 +536,75 @@ function adapterTests(
     const res = await makeRequest("GET", "/ordered");
     expect(res.status).toBe(200);
     expect(middlewareOrder).toEqual(["dir1", "dir2", "route1"]);
+  });
+
+  test("11. plain returns honor buffered status and headers", async () => {
+    const { makeRequest } = getCtx();
+    const res = await makeRequest("POST", "/created");
+    expect(res.status).toBe(201);
+    expect(res.headers.get("x-created")).toBe("yes");
+    expect(await res.json()).toEqual({ created: true });
+  });
+
+  test("12. redirects preserve the Location header", async () => {
+    const { makeRequest } = getCtx();
+    const res = await makeRequest("GET", "/redirect", { redirect: "manual" });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("https://example.com");
+  });
+
+  test("13. raw Response preserves binary bodies and headers", async () => {
+    const { makeRequest } = getCtx();
+    const res = await makeRequest("GET", "/binary");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("application/octet-stream");
+    expect(res.headers.get("x-binary")).toBe("yes");
+    expect(Array.from(new Uint8Array(await res.arrayBuffer()))).toEqual([0, 255, 1]);
+  });
+
+  test("14. ctx.request exposes the inbound body", async () => {
+    const { makeRequest } = getCtx();
+    const res = await makeRequest("POST", "/echo-body", {
+      body: { hello: "world" },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ bodyText: '{"hello":"world"}' });
+  });
+
+  test("15. streamed text starts before the tail chunk is produced", async () => {
+    const { makeRequest } = getCtx();
+    const res = await makeRequest("GET", "/stream-text");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/plain");
+
+    const combined = await readStreamWithEarlyFirstChunk(res, FIRST_CHUNK_TIMEOUT_MS);
+    expect(new TextDecoder().decode(combined)).toBe("hello\nworld");
+  });
+
+  test("16. SSE responses stream the first event immediately", async () => {
+    const { makeRequest } = getCtx();
+    const res = await makeRequest("GET", "/stream-sse");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/event-stream");
+    expect(res.headers.get("cache-control")).toBe("no-cache");
+
+    const combined = await readStreamWithEarlyFirstChunk(res, FIRST_CHUNK_TIMEOUT_MS);
+    expect(new TextDecoder().decode(combined)).toBe("data: one\n\ndata: two\n\n");
+  });
+
+  test("17. streamed binary responses preserve bytes without buffering first", async () => {
+    const { makeRequest } = getCtx();
+    const res = await makeRequest("GET", "/stream-binary");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("application/octet-stream");
+    expect(res.headers.get("x-streamed")).toBe("yes");
+
+    const combined = await readStreamWithEarlyFirstChunk(res, FIRST_CHUNK_TIMEOUT_MS);
+    expect(combined.byteLength).toBe(
+      STREAM_BINARY_CHUNK_ONE_SIZE + STREAM_BINARY_CHUNK_TWO_SIZE,
+    );
+    expect(combined.slice(0, STREAM_BINARY_CHUNK_ONE_SIZE).every((byte) => byte === 7)).toBe(true);
+    expect(combined.slice(STREAM_BINARY_CHUNK_ONE_SIZE).every((byte) => byte === 9)).toBe(true);
   });
 }
 

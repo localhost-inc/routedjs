@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
+import { composeRouteHandler, type RoutedMiddleware } from "../core/compose.ts";
 import { BaseRouteContext } from "../core/context.ts";
 import { RouteError } from "../core/error.ts";
 import { validateSchema } from "../core/validate.ts";
@@ -60,43 +61,6 @@ export function createHonoApp(
 }
 
 // ---------------------------------------------------------------------------
-// Compose — Koa-style compose that threads return values back up
-// ---------------------------------------------------------------------------
-
-type RoutedMiddleware = (
-  ctx: HonoRouteContext,
-  next: () => Promise<unknown>,
-) => unknown | Promise<unknown>;
-
-function compose(
-  middlewares: RoutedMiddleware[],
-  handler: (ctx: HonoRouteContext) => unknown | Promise<unknown>,
-): (ctx: HonoRouteContext) => Promise<unknown> {
-  return async (ctx: HonoRouteContext) => {
-    let index = -1;
-
-    async function dispatch(i: number): Promise<unknown> {
-      if (i <= index) throw new Error("next() called multiple times");
-      index = i;
-
-      if (i === middlewares.length) {
-        return handler(ctx);
-      }
-
-      const mw = middlewares[i]!;
-      let downstreamResult: unknown;
-      const result = await mw(ctx, async () => {
-        downstreamResult = await dispatch(i + 1);
-        return downstreamResult;
-      });
-      return result !== undefined ? result : downstreamResult;
-    }
-
-    return dispatch(0);
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------
 
@@ -108,7 +72,7 @@ function registerRoute(
 ) {
   const { path: routePath, method, route, middleware: directoryMiddleware } = entry;
 
-  const chain: RoutedMiddleware[] = [];
+  const chain: RoutedMiddleware<HonoRouteContext>[] = [];
 
   for (const mw of globalMiddleware) {
     chain.push(toRoutedMiddleware(mw));
@@ -123,15 +87,32 @@ function registerRoute(
   }
 
   const terminalHandler = createTerminalHandler(route, routePath, validateResponses);
+  const execute = composeRouteHandler(chain, terminalHandler);
 
   app.on(method, [routePath], async (c) => {
     const ctx = new HonoRouteContext(c);
     try {
-      const result = await compose(chain, terminalHandler)(ctx);
-
+      const result = await execute(ctx);
       if (result instanceof Response) {
         return result;
       }
+
+      if (result !== undefined && !ctx.hasBufferedResponseInit()) {
+        return c.json(result as object);
+      }
+
+      if (result === undefined) {
+        const headers = ctx.getBufferedHeaders();
+        return new Response(null, {
+          status: ctx.getBufferedStatus(),
+          headers,
+        });
+      }
+
+      ctx.forEachBufferedHeader((value, key) => {
+        c.header(key, value);
+      });
+      c.status(ctx.getBufferedStatus() as never);
       return c.json(result as object);
     } catch (err) {
       if (err instanceof RouteError) {
@@ -145,7 +126,9 @@ function registerRoute(
   });
 }
 
-function toRoutedMiddleware(mw: MiddlewareDefinition): RoutedMiddleware {
+function toRoutedMiddleware(
+  mw: MiddlewareDefinition,
+): RoutedMiddleware<HonoRouteContext> {
   return async (ctx, next) => {
     return mw.handler({ ctx, next });
   };
@@ -165,7 +148,7 @@ function createTerminalHandler(
     if (schemas.params) {
       const result = await validateSchema(schemas.params, c.req.param());
       if (!result.success) {
-        return c.json(
+        return ctx.json(
           { error: "Validation failed", target: "params", issues: result.issues },
           400,
         );
@@ -178,7 +161,7 @@ function createTerminalHandler(
     if (schemas.query) {
       const result = await validateSchema(schemas.query, c.req.query());
       if (!result.success) {
-        return c.json(
+        return ctx.json(
           { error: "Validation failed", target: "query", issues: result.issues },
           400,
         );
@@ -192,7 +175,7 @@ function createTerminalHandler(
       const rawBody = await c.req.json().catch(() => null);
       const result = await validateSchema(schemas.body, rawBody);
       if (!result.success) {
-        return c.json(
+        return ctx.json(
           { error: "Validation failed", target: "body", issues: result.issues },
           400,
         );

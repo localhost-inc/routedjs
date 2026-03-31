@@ -1,4 +1,4 @@
-import { createRoute } from "routed";
+import { createRoute } from "routedjs";
 import { z } from "zod";
 
 export default createRoute({

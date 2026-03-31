@@ -3,6 +3,7 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: {
     index: "src/index.ts",
+    "cli/index": "src/cli/index.ts",
     "adapters/hono": "src/adapters/hono.ts",
     "adapters/koa": "src/adapters/koa.ts",
     "adapters/express": "src/adapters/express.ts",

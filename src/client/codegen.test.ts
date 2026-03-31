@@ -22,7 +22,7 @@ describe("generateClientCode", () => {
     expect(code).not.toContain('import type { z }');
 
     // Imports from routed/client
-    expect(code).toContain('import { createClient, type RouteMap, type Client, type ClientOptions } from "routed/client"');
+    expect(code).toContain('import { createClient, type RouteMap, type Client, type ClientOptions } from "routedjs/client"');
 
     // Imports route types
     expect(code).toContain("import type route0 from");

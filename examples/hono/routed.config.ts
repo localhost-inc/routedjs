@@ -1,4 +1,4 @@
-import { defineConfig } from "routed";
+import { defineConfig } from "routedjs";
 
 export default defineConfig({
   routesDir: "./routes",
