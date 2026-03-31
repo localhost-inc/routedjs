@@ -1,0 +1,174 @@
+import { describe, expect, test } from "bun:test";
+import { z } from "zod";
+import { createRoute } from "../core/create-route.ts";
+import { createMiddleware } from "../core/create-middleware.ts";
+import { defineRouteTree } from "../core/define-route-tree.ts";
+import { generateOpenAPISpec } from "./index.ts";
+
+const noop = createMiddleware(async ({ next }) => next());
+
+const routeTree = defineRouteTree([
+  {
+    path: "/health",
+    method: "get",
+    route: createRoute({
+      meta: { summary: "Health check", tags: ["ops"] },
+      handler: async () => ({ status: "ok" }),
+    }),
+    middleware: [],
+  },
+  {
+    path: "/users",
+    method: "get",
+    route: createRoute({
+      meta: { summary: "List users", tags: ["users"] },
+      schemas: {
+        query: z.object({
+          limit: z.number().optional(),
+          offset: z.number().optional(),
+        }),
+        response: z.object({
+          users: z.array(z.object({ id: z.string(), name: z.string() })),
+        }),
+      },
+      handler: async () => ({ users: [] }),
+    }),
+    middleware: [noop],
+  },
+  {
+    path: "/users",
+    method: "post",
+    route: createRoute({
+      meta: { summary: "Create user", tags: ["users"] },
+      schemas: {
+        body: z.object({
+          name: z.string(),
+          email: z.string().email(),
+        }),
+        response: z.object({ id: z.string(), name: z.string() }),
+      },
+      handler: async ({ body }) => ({ id: "1", ...body }),
+    }),
+    middleware: [noop],
+  },
+  {
+    path: "/users/:userId",
+    method: "get",
+    route: createRoute({
+      meta: {
+        summary: "Get user by ID",
+        tags: ["users"],
+        operationId: "getUser",
+      },
+      schemas: {
+        params: z.object({ userId: z.string().uuid() }),
+        response: z.object({ id: z.string(), name: z.string() }),
+      },
+      handler: async ({ params }) => ({ id: params.userId, name: "Kyle" }),
+    }),
+    middleware: [],
+  },
+  {
+    path: "/legacy/endpoint",
+    method: "get",
+    route: createRoute({
+      meta: { deprecated: true, summary: "Old endpoint" },
+      handler: async () => ({ ok: true }),
+    }),
+    middleware: [],
+  },
+]);
+
+const spec = generateOpenAPISpec(routeTree, {
+  info: { title: "Test API", version: "1.0.0" },
+  servers: [{ url: "http://localhost:3000" }],
+});
+
+describe("generateOpenAPISpec", () => {
+  test("produces valid OpenAPI 3.1 structure", () => {
+    expect(spec.openapi).toBe("3.1.0");
+    expect(spec.info.title).toBe("Test API");
+    expect(spec.info.version).toBe("1.0.0");
+    expect(spec.servers).toHaveLength(1);
+  });
+
+  test("generates paths with correct methods", () => {
+    expect(spec.paths["/health"]).toBeDefined();
+    expect(spec.paths["/health"]!.get).toBeDefined();
+
+    expect(spec.paths["/users"]).toBeDefined();
+    expect(spec.paths["/users"]!.get).toBeDefined();
+    expect(spec.paths["/users"]!.post).toBeDefined();
+
+    expect(spec.paths["/users/{userId}"]).toBeDefined();
+    expect(spec.paths["/users/{userId}"]!.get).toBeDefined();
+  });
+
+  test("converts :param to {param} in paths", () => {
+    expect(spec.paths["/users/:userId"]).toBeUndefined();
+    expect(spec.paths["/users/{userId}"]).toBeDefined();
+  });
+
+  test("includes meta fields", () => {
+    const getHealth = spec.paths["/health"]!.get as Record<string, unknown>;
+    expect(getHealth.summary).toBe("Health check");
+    expect(getHealth.tags).toEqual(["ops"]);
+  });
+
+  test("uses custom operationId when provided", () => {
+    const getUser = spec.paths["/users/{userId}"]!.get as Record<string, unknown>;
+    expect(getUser.operationId).toBe("getUser");
+  });
+
+  test("auto-derives operationId when not provided", () => {
+    const getHealth = spec.paths["/health"]!.get as Record<string, unknown>;
+    expect(getHealth.operationId).toBe("getHealth");
+
+    const postUsers = spec.paths["/users"]!.post as Record<string, unknown>;
+    expect(postUsers.operationId).toBe("postUsers");
+  });
+
+  test("generates path parameters from params schema", () => {
+    const getUser = spec.paths["/users/{userId}"]!.get as Record<string, unknown>;
+    const params = getUser.parameters as Array<Record<string, unknown>>;
+    expect(params).toHaveLength(1);
+    expect(params[0]!.name).toBe("userId");
+    expect(params[0]!.in).toBe("path");
+    expect(params[0]!.required).toBe(true);
+  });
+
+  test("generates query parameters from query schema", () => {
+    const getUsers = spec.paths["/users"]!.get as Record<string, unknown>;
+    const params = getUsers.parameters as Array<Record<string, unknown>>;
+    expect(params).toHaveLength(2);
+    expect(params.map((p) => p.name)).toContain("limit");
+    expect(params.map((p) => p.name)).toContain("offset");
+    // Optional query params
+    expect(params.find((p) => p.name === "limit")!.required).toBe(false);
+  });
+
+  test("generates requestBody from body schema", () => {
+    const postUsers = spec.paths["/users"]!.post as Record<string, unknown>;
+    const body = postUsers.requestBody as Record<string, unknown>;
+    expect(body.required).toBe(true);
+    const content = body.content as Record<string, unknown>;
+    const json = content["application/json"] as Record<string, unknown>;
+    const schema = json.schema as Record<string, unknown>;
+    expect(schema.type).toBe("object");
+    expect(schema.properties).toBeDefined();
+  });
+
+  test("generates response schema", () => {
+    const getUser = spec.paths["/users/{userId}"]!.get as Record<string, unknown>;
+    const responses = getUser.responses as Record<string, Record<string, unknown>>;
+    const ok = responses["200"]!;
+    expect(ok.description).toBe("Get user by ID");
+    const content = ok.content as Record<string, unknown>;
+    expect(content["application/json"]).toBeDefined();
+  });
+
+  test("marks deprecated routes", () => {
+    const legacy = spec.paths["/legacy/endpoint"]!.get as Record<string, unknown>;
+    expect(legacy.deprecated).toBe(true);
+  });
+});

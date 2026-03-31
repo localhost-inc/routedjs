@@ -1,0 +1,132 @@
+{
+  "name": "routed",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "File-system routing for APIs. Drop a file, get an endpoint.",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./hono": {
+      "bun": "./src/adapters/hono.ts",
+      "import": {
+        "types": "./dist/adapters/hono.d.ts",
+        "default": "./dist/adapters/hono.js"
+      }
+    },
+    "./koa": {
+      "bun": "./src/adapters/koa.ts",
+      "import": {
+        "types": "./dist/adapters/koa.d.ts",
+        "default": "./dist/adapters/koa.js"
+      }
+    },
+    "./elysia": {
+      "bun": "./src/adapters/elysia.ts",
+      "import": {
+        "types": "./dist/adapters/elysia.d.ts",
+        "default": "./dist/adapters/elysia.js"
+      }
+    },
+    "./express": {
+      "bun": "./src/adapters/express.ts",
+      "import": {
+        "types": "./dist/adapters/express.d.ts",
+        "default": "./dist/adapters/express.js"
+      }
+    },
+    "./openapi": {
+      "bun": "./src/openapi/index.ts",
+      "import": {
+        "types": "./dist/openapi/index.d.ts",
+        "default": "./dist/openapi/index.js"
+      }
+    },
+    "./client": {
+      "bun": "./src/client/index.ts",
+      "import": {
+        "types": "./dist/client/index.d.ts",
+        "default": "./dist/client/index.js"
+      }
+    }
+  },
+  "bin": {
+    "routed": "./src/cli/index.ts"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "router",
+    "file-system-routing",
+    "api",
+    "rest",
+    "hono",
+    "express",
+    "koa",
+    "elysia",
+    "codegen",
+    "openapi",
+    "zod",
+    "valibot",
+    "arktype",
+    "standard-schema",
+    "typescript"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test src",
+    "bench": "bun run bench/index.ts",
+    "prepublishOnly": "bun run build && bun test"
+  },
+  "dependencies": {
+    "@standard-schema/spec": "^1.1.0",
+    "chokidar": "^4.0.0"
+  },
+  "peerDependencies": {
+    "hono": "^4",
+    "elysia": "^1",
+    "express": "^5",
+    "koa": "^2 || ^3",
+    "typescript": "^5",
+    "zod-to-json-schema": "^3"
+  },
+  "peerDependenciesMeta": {
+    "hono": {
+      "optional": true
+    },
+    "elysia": {
+      "optional": true
+    },
+    "express": {
+      "optional": true
+    },
+    "koa": {
+      "optional": true
+    },
+    "zod-to-json-schema": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/express": "^5.0.6",
+    "@types/koa": "^3.0.2",
+    "elysia": "^1.4.28",
+    "express": "^5.2.1",
+    "hono": "^4",
+    "koa": "^3.2.0",
+    "mitata": "^1.0.34",
+    "tsup": "^8.5.1",
+    "zod": "^3"
+  }
+}
