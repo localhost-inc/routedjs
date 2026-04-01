@@ -314,6 +314,18 @@ async function resolveFrameworkCodegen(framework: string): Promise<FrameworkCode
       const mod = await import("../adapters/hono.ts");
       return mod.generateTypedApp as FrameworkCodegen;
     }
+    case "express": {
+      const mod = await import("../adapters/express.ts");
+      return mod.generateTypedApp as FrameworkCodegen;
+    }
+    case "koa": {
+      const mod = await import("../adapters/koa.ts");
+      return mod.generateTypedApp as FrameworkCodegen;
+    }
+    case "elysia": {
+      const mod = await import("../adapters/elysia.ts");
+      return mod.generateTypedApp as FrameworkCodegen;
+    }
     default:
       throw new Error(`Framework "${framework}" does not support typed app generation.`);
   }
