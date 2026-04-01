@@ -62,7 +62,7 @@ function filePathToUrlPath(relativePath: string): string {
   const segmentName = parts[0]!;
 
   // Build path segments from directory + filename
-  const segments: string[] = [];
+  const fileSystemSegments: string[] = [];
 
   if (dir !== ".") {
     for (const part of dir.split(path.sep)) {
@@ -70,24 +70,45 @@ function filePathToUrlPath(relativePath: string): string {
         // Pathless group — skip this segment
         continue;
       }
-      segments.push(convertSegment(part));
+      fileSystemSegments.push(part);
     }
   }
 
   // "index" is stripped — it represents the directory root
   if (segmentName !== "index") {
-    segments.push(convertSegment(segmentName));
+    fileSystemSegments.push(segmentName);
   }
+
+  assertCatchAllSegmentsAreTerminal(fileSystemSegments, relativePath);
+  const segments = fileSystemSegments.map(convertSegment);
 
   return "/" + segments.join("/");
 }
 
 function convertSegment(segment: string): string {
+  // $$path -> :path*
+  if (segment.startsWith("$$")) {
+    return ":" + segment.slice(2) + "*";
+  }
   // $param → :param
   if (segment.startsWith("$")) {
     return ":" + segment.slice(1);
   }
   return segment;
+}
+
+function assertCatchAllSegmentsAreTerminal(
+  segments: string[],
+  relativePath: string,
+): void {
+  const catchAllIndex = segments.findIndex((segment) => segment.startsWith("$$"));
+  if (catchAllIndex === -1) return;
+
+  if (catchAllIndex !== segments.length - 1) {
+    throw new Error(
+      `Catch-all segment must be the final route segment: ${relativePath}`,
+    );
+  }
 }
 
 async function scanRoutes(routesDir: string): Promise<ScannedRoute[]> {

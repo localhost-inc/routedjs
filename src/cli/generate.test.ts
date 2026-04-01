@@ -39,6 +39,14 @@ describe("filePathToUrlPath", () => {
     expect(filePathToUrlPath("users/$userId.get.route.ts")).toBe("/users/:userId");
   });
 
+  test("catch-all param as filename", () => {
+    expect(filePathToUrlPath("storage/$$path.get.route.ts")).toBe("/storage/:path*");
+  });
+
+  test("catch-all param as directory", () => {
+    expect(filePathToUrlPath("storage/$$path/index.get.route.ts")).toBe("/storage/:path*");
+  });
+
   test("nested dynamic params", () => {
     expect(filePathToUrlPath("users/$userId/visits.get.route.ts")).toBe(
       "/users/:userId/visits",
@@ -57,6 +65,12 @@ describe("filePathToUrlPath", () => {
 
   test("pathless group nested", () => {
     expect(filePathToUrlPath("_auth/login.post.route.ts")).toBe("/login");
+  });
+
+  test("catch-all params must be terminal", () => {
+    expect(() => filePathToUrlPath("storage/$$path/meta.get.route.ts")).toThrow(
+      "Catch-all segment must be the final route segment",
+    );
   });
 });
 

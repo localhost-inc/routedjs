@@ -3,6 +3,11 @@ import type { Context as ElysiaContext } from "elysia";
 import { composeRouteHandler, type RoutedMiddleware } from "../core/compose.ts";
 import { BaseRouteContext } from "../core/context.ts";
 import { RouteError } from "../core/error.ts";
+import {
+  compareRoutePathSpecificity,
+  getPathname,
+  matchRoutePath,
+} from "../core/path.ts";
 import { validateSchema } from "../core/validate.ts";
 import type {
   MiddlewareDefinition,
@@ -19,16 +24,22 @@ import type {
 class ElysiaRouteContext extends BaseRouteContext {
   readonly method: string;
   readonly path: string;
+  readonly params: Record<string, unknown>;
   readonly raw: ElysiaContext;
   private readonly requestUrl: string;
   private readonly requestHeaders: Headers;
   private readonly requestBody: RequestBody | undefined;
   private requestCache?: Request;
 
-  constructor(elysiaCtx: ElysiaContext) {
+  constructor(
+    elysiaCtx: ElysiaContext,
+    routePath: string,
+    params?: Record<string, unknown>,
+  ) {
     super();
     this.method = elysiaCtx.request.method;
-    this.path = new URL(elysiaCtx.request.url).pathname;
+    this.path = getPathname(elysiaCtx.request.url);
+    this.params = params ?? matchRoutePath(routePath, this.path) ?? (elysiaCtx.params as Record<string, unknown>);
     this.raw = elysiaCtx;
     this.requestUrl = elysiaCtx.request.url;
     this.requestHeaders = elysiaCtx.request.headers;
@@ -99,20 +110,27 @@ export function createElysiaApp(routeTree: RouteTree, options?: CreateElysiaAppO
   const validateResponses = options?.validateResponses ?? false;
   const globalMiddleware = options?.middleware ?? [];
 
-  for (const entry of routeTree) {
-    app = registerRoute(app, entry, validateResponses, globalMiddleware);
+  const preparedRoutes = routeTree.map((entry) =>
+    prepareRoute(entry, validateResponses, globalMiddleware),
+  ).sort((a, b) => compareRoutePathSpecificity(a.path, b.path));
+
+  for (const entry of preparedRoutes) {
+    app = registerRoute(app, entry);
   }
 
   return app;
 }
 
-function registerRoute(
-  app: Elysia,
+type PreparedRoute = RouteEntry & {
+  execute: (ctx: ElysiaRouteContext) => Promise<unknown>;
+};
+
+function prepareRoute(
   entry: RouteEntry,
   validateResponses: boolean,
   globalMiddleware: MiddlewareDefinition<any>[],
-): Elysia {
-  const { path: routePath, method, route, middleware: directoryMiddleware } = entry;
+): PreparedRoute {
+  const { path: routePath, route, middleware: directoryMiddleware } = entry;
 
   const chain: RoutedMiddleware<ElysiaRouteContext>[] = [
     ...globalMiddleware,
@@ -124,26 +142,49 @@ function registerRoute(
     async (ctx) => runHandler(route, ctx, routePath, validateResponses),
   );
 
-  const handler = async (elysiaCtx: ElysiaContext) => {
-    const ctx = new ElysiaRouteContext(elysiaCtx);
+  return { ...entry, execute };
+}
 
-    try {
-      const result = await execute(ctx);
-      return sendResult(elysiaCtx, ctx, result);
-    } catch (err) {
-      if (err instanceof RouteError) {
-        elysiaCtx.set.status = err.status;
-        return {
-          error: err.message,
-          ...(err.data ? { data: err.data } : {}),
-        };
-      }
-      throw err;
-    }
+function registerRoute(
+  app: Elysia,
+  entry: PreparedRoute,
+): Elysia {
+  const { path: routePath, method } = entry;
+  const adapterRoutePath = translateRoutePathForElysia(routePath);
+
+  const handler = async (elysiaCtx: ElysiaContext) => {
+    return executePreparedRoute(entry, elysiaCtx, routePath);
   };
 
   const methodUpper = method.toUpperCase();
-  return app.route(methodUpper, routePath, handler as never);
+  return app.route(methodUpper, adapterRoutePath, handler as never) as unknown as Elysia;
+}
+
+function translateRoutePathForElysia(path: string): string {
+  return path.replace(/:(\w+)\*/g, "*");
+}
+
+async function executePreparedRoute(
+  route: PreparedRoute,
+  elysiaCtx: ElysiaContext,
+  routePath: string,
+  params?: Record<string, unknown>,
+): Promise<unknown> {
+  const ctx = new ElysiaRouteContext(elysiaCtx, routePath, params);
+
+  try {
+    const result = await route.execute(ctx);
+    return sendResult(elysiaCtx, ctx, result);
+  } catch (err) {
+    if (err instanceof RouteError) {
+      elysiaCtx.set.status = err.status;
+      return {
+        error: err.message,
+        ...(err.data ? { data: err.data } : {}),
+      };
+    }
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +214,7 @@ async function runHandler(
 
   let params: unknown;
   if (schemas.params) {
-    const result = await validateSchema(schemas.params, elysiaCtx.params);
+    const result = await validateSchema(schemas.params, ctx.params);
     if (!result.success) {
       return ctx.json({ error: "Validation failed", target: "params", issues: result.issues }, 400);
     }

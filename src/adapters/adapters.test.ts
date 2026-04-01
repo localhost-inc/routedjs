@@ -254,6 +254,29 @@ function buildRouteTree(): RouteTree {
     },
 
     {
+      path: "/storage/:path*",
+      method: "get",
+      route: createRoute({
+        schemas: {
+          params: z.object({ path: z.array(z.string()) }),
+        },
+        handler: async ({ params }) => ({
+          path: params.path,
+        }),
+      }),
+      middleware: [],
+    },
+
+    {
+      path: "/storage/root",
+      method: "get",
+      route: createRoute({
+        handler: async () => ({ root: true }),
+      }),
+      middleware: [],
+    },
+
+    {
       path: "/stream-text",
       method: "get",
       route: createRoute({
@@ -569,6 +592,27 @@ function adapterTests(
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ bodyText: '{"hello":"world"}' });
+  });
+
+  test("14a. catch-all params are extracted correctly", async () => {
+    const { makeRequest } = getCtx();
+    const res = await makeRequest("GET", "/storage/a/b/c");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ path: ["a", "b", "c"] });
+  });
+
+  test("14b. catch-all params preserve encoded segment boundaries", async () => {
+    const { makeRequest } = getCtx();
+    const res = await makeRequest("GET", "/storage/a%2Fb/c%20d");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ path: ["a/b", "c d"] });
+  });
+
+  test("14c. static routes win over catch-all routes", async () => {
+    const { makeRequest } = getCtx();
+    const res = await makeRequest("GET", "/storage/root");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ root: true });
   });
 
   test("15. streamed text starts before the tail chunk is produced", async () => {

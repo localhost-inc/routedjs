@@ -78,6 +78,18 @@ const routeTree = defineRouteTree([
     }),
     middleware: [],
   },
+  {
+    path: "/storage/:path*",
+    method: "get",
+    route: createRoute({
+      meta: { summary: "Get file by path" },
+      schemas: {
+        params: z.object({ path: z.array(z.string()) }),
+      },
+      handler: async ({ params }) => ({ path: params.path }),
+    }),
+    middleware: [],
+  },
 ]);
 
 const spec = generateOpenAPISpec(routeTree, {
@@ -103,11 +115,15 @@ describe("generateOpenAPISpec", () => {
 
     expect(spec.paths["/users/{userId}"]).toBeDefined();
     expect(spec.paths["/users/{userId}"]!.get).toBeDefined();
+    expect(spec.paths["/storage/{path}"]).toBeDefined();
+    expect(spec.paths["/storage/{path}"]!.get).toBeDefined();
   });
 
   test("converts :param to {param} in paths", () => {
     expect(spec.paths["/users/:userId"]).toBeUndefined();
     expect(spec.paths["/users/{userId}"]).toBeDefined();
+    expect(spec.paths["/storage/:path*"]).toBeUndefined();
+    expect(spec.paths["/storage/{path}"]).toBeDefined();
   });
 
   test("includes meta fields", () => {
@@ -127,6 +143,9 @@ describe("generateOpenAPISpec", () => {
 
     const postUsers = spec.paths["/users"]!.post as Record<string, unknown>;
     expect(postUsers.operationId).toBe("postUsers");
+
+    const getStorage = spec.paths["/storage/{path}"]!.get as Record<string, unknown>;
+    expect(getStorage.operationId).toBe("getStorageByPath");
   });
 
   test("generates path parameters from params schema", () => {
@@ -136,6 +155,17 @@ describe("generateOpenAPISpec", () => {
     expect(params[0]!.name).toBe("userId");
     expect(params[0]!.in).toBe("path");
     expect(params[0]!.required).toBe(true);
+
+    const getStorage = spec.paths["/storage/{path}"]!.get as Record<string, unknown>;
+    const storageParams = getStorage.parameters as Array<Record<string, unknown>>;
+    expect(storageParams).toHaveLength(1);
+    expect(storageParams[0]!.name).toBe("path");
+    expect(storageParams[0]!.in).toBe("path");
+    expect(storageParams[0]!.schema).toEqual({
+      type: "string",
+      description:
+        "Slash-delimited catch-all path remainder. Encode each segment separately when constructing the URL.",
+    });
   });
 
   test("generates query parameters from query schema", () => {

@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
+import { extractParamNames, extractSplatParamNames, toOpenAPIPath } from "../core/path.ts";
 import type { RouteEntry, RouteTree } from "../core/types.ts";
 
 const require = createRequire(import.meta.url);
@@ -148,6 +149,7 @@ function extractPathParams(
 
   // Only include params that are actually in the path
   const pathParamNames = extractParamNames(path);
+  const splatParamNames = new Set(extractSplatParamNames(path));
 
   return Object.entries(properties)
     .filter(([name]) => pathParamNames.includes(name))
@@ -155,8 +157,27 @@ function extractPathParams(
       name,
       in: "path",
       required: true, // path params are always required
-      schema,
+      schema: splatParamNames.has(name) ? toOpenAPIPathParamSchema(schema) : schema,
     }));
+}
+
+function toOpenAPIPathParamSchema(schema: unknown): Record<string, unknown> {
+  const baseSchema =
+    schema && typeof schema === "object"
+      ? { ...(schema as Record<string, unknown>) }
+      : {};
+  const existingDescription = typeof baseSchema.description === "string"
+    ? baseSchema.description
+    : undefined;
+  const description =
+    "Slash-delimited catch-all path remainder. Encode each segment separately when constructing the URL.";
+
+  return {
+    type: "string",
+    ...(existingDescription
+      ? { description: `${existingDescription} ${description}` }
+      : { description }),
+  };
 }
 
 function extractQueryParams(querySchema: StandardSchemaV1): unknown[] {
@@ -225,16 +246,6 @@ function schemaToJsonSchema(schema: StandardSchemaV1): unknown | null {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function toOpenAPIPath(routePath: string): string {
-  // /users/:userId → /users/{userId}
-  return routePath.replace(/:(\w+)/g, "{$1}");
-}
-
-function extractParamNames(path: string): string[] {
-  const matches = path.match(/:(\w+)/g);
-  return matches ? matches.map((m) => m.slice(1)) : [];
-}
-
 function deriveOperationId(path: string, method: string): string {
   // GET /users/:userId/visits → getUsersByUserIdVisits
   const segments = path
@@ -242,7 +253,7 @@ function deriveOperationId(path: string, method: string): string {
     .filter(Boolean)
     .map((segment) => {
       if (segment.startsWith(":")) {
-        return "By" + capitalize(segment.slice(1));
+        return "By" + capitalize(segment.replace(/^:/, "").replace(/\*$/, ""));
       }
       return capitalize(segment);
     });

@@ -49,7 +49,7 @@ export class ClientError extends Error {
  * Generated code produces a map of these keyed by "METHOD /path".
  */
 export type EndpointDef = {
-  params?: Record<string, string>;
+  params?: Record<string, unknown>;
   query?: Record<string, unknown>;
   body?: unknown;
   response?: unknown;
@@ -163,12 +163,25 @@ export function createClient<TMap extends RouteMap>(
       // Build the URL path, substituting params
       let urlPath = "/" + pathSegments.join("/");
       const params = (reqOptions as Record<string, unknown>)?.params as
-        | Record<string, string>
+        | Record<string, string | string[]>
         | undefined;
 
       if (params) {
         for (const [key, value] of Object.entries(params)) {
-          urlPath = urlPath.replace(`:${key}`, encodeURIComponent(value));
+          const splatToken = `:${key}*`;
+          if (urlPath.includes(splatToken)) {
+            if (!Array.isArray(value)) {
+              throw new Error(`Catch-all param "${key}" must be an array of path segments`);
+            }
+
+            urlPath = urlPath.replace(
+              splatToken,
+              value.map((segment) => encodeURIComponent(String(segment))).join("/"),
+            );
+            continue;
+          }
+
+          urlPath = urlPath.replace(`:${key}`, encodeURIComponent(String(value)));
         }
       }
 

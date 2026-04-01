@@ -3,6 +3,11 @@ import type { Context } from "hono";
 import { composeRouteHandler, type RoutedMiddleware } from "../core/compose.ts";
 import { BaseRouteContext } from "../core/context.ts";
 import { RouteError } from "../core/error.ts";
+import {
+  compareRoutePathSpecificity,
+  getPathname,
+  matchRoutePath,
+} from "../core/path.ts";
 import { validateSchema } from "../core/validate.ts";
 import type {
   MiddlewareDefinition,
@@ -53,7 +58,11 @@ export function createHonoApp(
   const validateResponses = options?.validateResponses ?? false;
   const globalMiddleware = options?.middleware ?? [];
 
-  for (const entry of routeTree) {
+  const sortedRoutes = [...routeTree].sort((a, b) =>
+    compareRoutePathSpecificity(a.path, b.path),
+  );
+
+  for (const entry of sortedRoutes) {
     registerRoute(app, entry, validateResponses, globalMiddleware);
   }
 
@@ -71,6 +80,7 @@ function registerRoute(
   globalMiddleware: MiddlewareDefinition<any>[],
 ) {
   const { path: routePath, method, route, middleware: directoryMiddleware } = entry;
+  const adapterRoutePath = translateRoutePathForHono(routePath);
 
   const chain: RoutedMiddleware<HonoRouteContext>[] = [];
 
@@ -89,7 +99,7 @@ function registerRoute(
   const terminalHandler = createTerminalHandler(route, routePath, validateResponses);
   const execute = composeRouteHandler(chain, terminalHandler);
 
-  app.on(method, [routePath], async (c) => {
+  app.on(method, [adapterRoutePath], async (c) => {
     const ctx = new HonoRouteContext(c);
     try {
       const result = await execute(ctx);
@@ -126,6 +136,10 @@ function registerRoute(
   });
 }
 
+function translateRoutePathForHono(path: string): string {
+  return path.replace(/:(\w+)\*/g, ":$1{.+}");
+}
+
 function toRoutedMiddleware(
   mw: MiddlewareDefinition,
 ): RoutedMiddleware<HonoRouteContext> {
@@ -146,7 +160,15 @@ function createTerminalHandler(
     // Validate and parse params
     let params: unknown;
     if (schemas.params) {
-      const result = await validateSchema(schemas.params, c.req.param());
+      const matchedParams = matchRoutePath(routePath, getPathname(c.req.raw.url));
+      if (!matchedParams) {
+        throw new RouteError(500, `Route matched but param extraction failed for ${c.req.method} ${routePath}`);
+      }
+
+      const result = await validateSchema(
+        schemas.params,
+        matchedParams,
+      );
       if (!result.success) {
         return ctx.json(
           { error: "Validation failed", target: "params", issues: result.issues },

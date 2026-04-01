@@ -98,6 +98,18 @@ const routeTree = defineRouteTree([
     }),
     middleware: [],
   },
+  {
+    path: "/storage/:path*",
+    method: "get",
+    route: createRoute({
+      schemas: {
+        params: z.object({ path: z.array(z.string()) }),
+        response: z.object({ path: z.array(z.string()) }),
+      },
+      handler: async ({ params }) => ({ path: params.path }),
+    }),
+    middleware: [],
+  },
 ]);
 
 // ---------------------------------------------------------------------------
@@ -112,7 +124,11 @@ type TestRouteMap = {
   "put /users/:userId": { params: { userId: string }; query: undefined; body: { name: string }; response: { id: string; name: string } };
   "delete /users/:userId": { params: { userId: string }; query: undefined; body: undefined; response: { deleted: string } };
   "get /error": { params: undefined; query: undefined; body: undefined; response: unknown };
+  "get /storage/:path*": { params: { path: string[] }; query: undefined; body: undefined; response: { path: string[] } };
 };
+
+const routeMapTypeCheck: RouteMap = {} as TestRouteMap;
+void routeMapTypeCheck;
 
 // ---------------------------------------------------------------------------
 // Server setup
@@ -185,6 +201,22 @@ describe("createClient", () => {
     });
     expect(res.status).toBe(200);
     expect(res.data).toEqual({ deleted: "99" });
+  });
+
+  test("GET with catch-all path params", async () => {
+    const res = await client.storage[":path*"].get({
+      params: { path: ["docs", "api", "v1.json"] },
+    });
+    expect(res.status).toBe(200);
+    expect(res.data).toEqual({ path: ["docs", "api", "v1.json"] });
+  });
+
+  test("GET with encoded catch-all path params preserves segment boundaries", async () => {
+    const res = await client.storage[":path*"].get({
+      params: { path: ["docs/v1", "openapi spec.json"] },
+    });
+    expect(res.status).toBe(200);
+    expect(res.data).toEqual({ path: ["docs/v1", "openapi spec.json"] });
   });
 
   test("non-2xx response throws ClientError", async () => {

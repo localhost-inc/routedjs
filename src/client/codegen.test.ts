@@ -9,6 +9,7 @@ describe("generateClientCode", () => {
         { filePath: "/app/routes/users/index.get.route.ts", urlPath: "/users", method: "get" },
         { filePath: "/app/routes/users/index.post.route.ts", urlPath: "/users", method: "post" },
         { filePath: "/app/routes/users/$userId.get.route.ts", urlPath: "/users/:userId", method: "get" },
+        { filePath: "/app/routes/storage/$$path.get.route.ts", urlPath: "/storage/:path*", method: "get" },
       ],
       outFile: "/app/routed.client.ts",
       routesDir: "/app/routes",
@@ -29,12 +30,14 @@ describe("generateClientCode", () => {
     expect(code).toContain("import type route1 from");
     expect(code).toContain("import type route2 from");
     expect(code).toContain("import type route3 from");
+    expect(code).toContain("import type route4 from");
 
     // Generates route map entries
     expect(code).toContain('"get /health"');
     expect(code).toContain('"get /users"');
     expect(code).toContain('"post /users"');
     expect(code).toContain('"get /users/:userId"');
+    expect(code).toContain('"get /storage/:path*"');
 
     // Exports createApiClient factory
     expect(code).toContain("export function createApiClient");

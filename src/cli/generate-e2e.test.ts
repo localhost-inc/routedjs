@@ -261,6 +261,21 @@ describe("generate (end-to-end)", () => {
     expect(content).not.toMatch(/path: "[^"]*\$/);
   });
 
+  test("catch-all params are converted from $$ to :name* notation", async () => {
+    const routesDir = path.join(tmpDir, "routes");
+    const outFile = path.join(tmpDir, "manifest.ts");
+
+    await writeRouteFile(routesDir, "storage/$$path.get.route.ts");
+    await writeRouteFile(routesDir, "storage/_internal/$$asset/index.get.route.ts");
+
+    await generate({ routesDir, outFile });
+
+    const content = await readFile(outFile, "utf-8");
+
+    expect(content).toContain('path: "/storage/:path*"');
+    expect(content).toContain('path: "/storage/:asset*"');
+  });
+
   test("routes are sorted by path then method", async () => {
     const routesDir = path.join(tmpDir, "routes");
     const outFile = path.join(tmpDir, "manifest.ts");

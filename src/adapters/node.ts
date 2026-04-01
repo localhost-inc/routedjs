@@ -8,7 +8,7 @@ type StreamRequestInit = RequestInit & { duplex?: "half" };
 type RequestBody = Exclude<RequestInit["body"], null | undefined>;
 type HeaderValue = string | string[] | undefined;
 export type HeaderRecord = Record<string, HeaderValue>;
-type CachedBody = RequestBody | null;
+type CachedBody = Uint8Array | string | null;
 
 export function createHeaders(source: HeaderRecord): Headers {
   const headers = new Headers();

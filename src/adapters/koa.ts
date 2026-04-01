@@ -3,6 +3,11 @@ import type { Context as KoaContext } from "koa";
 import { composeRouteHandler, type RoutedMiddleware } from "../core/compose.ts";
 import { BaseRouteContext } from "../core/context.ts";
 import { RouteError } from "../core/error.ts";
+import {
+  compareRoutePathSpecificity,
+  getPathname,
+  matchRoutePath,
+} from "../core/path.ts";
 import { validateSchema } from "../core/validate.ts";
 import {
   applyResponseHeaders,
@@ -24,11 +29,11 @@ import type {
 class KoaRouteContext extends BaseRouteContext {
   readonly method: string;
   readonly path: string;
-  readonly params: Record<string, string>;
+  readonly params: Record<string, unknown>;
   readonly raw: KoaContext;
   private requestState?: NodeRequestState;
 
-  constructor(koaCtx: KoaContext, params: Record<string, string>) {
+  constructor(koaCtx: KoaContext, params: Record<string, unknown>) {
     super();
     this.method = koaCtx.method;
     this.path = koaCtx.path;
@@ -98,17 +103,17 @@ export function createKoaApp(routeTree: RouteTree, options?: CreateKoaAppOptions
 
     return {
       ...entry,
-      pattern: compilePattern(entry.path),
+      pattern: (pathname: string) => matchRoutePath(entry.path, pathname),
       execute: composeRouteHandler(
         chain,
         createTerminalHandler(entry.route, entry.path, validateResponses),
       ),
     };
-  });
+  }).sort((a, b) => compareRoutePathSpecificity(a.path, b.path));
 
   app.use(async (koaCtx, next) => {
     const method = koaCtx.method.toLowerCase();
-    const pathname = koaCtx.path;
+    const pathname = getPathname(koaCtx.req.url ?? koaCtx.url);
 
     for (const route of routes) {
       if (route.method !== method) continue;
@@ -137,42 +142,6 @@ export function createKoaApp(routeTree: RouteTree, options?: CreateKoaAppOptions
   });
 
   return app;
-}
-
-// ---------------------------------------------------------------------------
-// Pattern matching (simple :param support)
-// ---------------------------------------------------------------------------
-
-type PatternMatcher = (pathname: string) => Record<string, string> | null;
-
-function compilePattern(routePath: string): PatternMatcher {
-  const parts = routePath.split("/").filter(Boolean);
-  const paramNames: string[] = [];
-
-  const regexParts = parts.map((part) => {
-    if (part.startsWith(":")) {
-      paramNames.push(part.slice(1));
-      return "([^/]+)";
-    }
-    return escapeRegex(part);
-  });
-
-  const regex = new RegExp(`^/${regexParts.join("/")}$`);
-
-  return (pathname: string) => {
-    const match = pathname.match(regex);
-    if (!match) return null;
-
-    const params: Record<string, string> = {};
-    paramNames.forEach((name, i) => {
-      params[name] = match[i + 1]!;
-    });
-    return params;
-  };
-}
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // ---------------------------------------------------------------------------

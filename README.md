@@ -104,12 +104,15 @@ That's it. The same route files work with any adapter — swap `routedjs/hono` f
 | `index.get.route.ts` | `/` | `index` maps to directory root |
 | `users/index.get.route.ts` | `/users` | |
 | `users/$userId.get.route.ts` | `/users/:userId` | `$` prefix = dynamic param |
+| `storage/$$path.get.route.ts` | `/storage/:path*` | `$$` prefix = catch-all, final segment only |
 | `_admin/users.get.route.ts` | `/users` | `_` prefix on dirs = pathless group |
 | `_middleware.ts` | — | Directory-scoped middleware |
 
 **Filename format**: `{segment}.{method}.route.ts`
 
 Supported methods: `get`, `post`, `put`, `patch`, `delete`
+
+Catch-all segments use `$$name` and must be the final route segment. When you validate `params` for a catch-all route, model it as `string[]`. routedjs preserves segment boundaries, so a client param like `["docs/v1", "openapi.json"]` round-trips correctly.
 
 ## Middleware
 
@@ -258,6 +261,10 @@ const { data } = await api.users[":userId"].get({
   params: { userId: "abc-123" },
 });
 // data: { id: string, name: string }
+
+const file = await api.storage[":path*"].get({
+  params: { path: ["docs", "api", "openapi.json"] },
+});
 ```
 
 Types are inferred from your schemas at compile time. At runtime, the client is a thin wrapper around `fetch` — no runtime code generation, just typed HTTP calls.
@@ -309,6 +316,8 @@ If you're using Zod schemas for OpenAPI generation, install `zod-to-json-schema`
 ```bash
 bun add zod-to-json-schema
 ```
+
+Catch-all routes are represented in OpenAPI as a single slash-delimited `string` path parameter because OpenAPI path params cannot accurately express a segment array.
 
 Or from the CLI — add `openapi` to your config:
 

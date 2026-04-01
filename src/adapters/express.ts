@@ -9,6 +9,11 @@ import type {
 import { composeRouteHandler, type RoutedMiddleware } from "../core/compose.ts";
 import { BaseRouteContext } from "../core/context.ts";
 import { RouteError } from "../core/error.ts";
+import {
+  compareRoutePathSpecificity,
+  getPathname,
+  matchRoutePath,
+} from "../core/path.ts";
 import { validateSchema } from "../core/validate.ts";
 import {
   applyResponseHeaders,
@@ -83,7 +88,11 @@ export function createExpressApp(routeTree: RouteTree, options?: CreateExpressAp
   const validateResponses = options?.validateResponses ?? false;
   const globalMiddleware = options?.middleware ?? [];
 
-  for (const entry of routeTree) {
+  const sortedRoutes = [...routeTree].sort((a, b) =>
+    compareRoutePathSpecificity(a.path, b.path),
+  );
+
+  for (const entry of sortedRoutes) {
     registerRoute(app, entry, validateResponses, globalMiddleware);
   }
 
@@ -101,6 +110,7 @@ function registerRoute(
   globalMiddleware: MiddlewareDefinition<any>[],
 ) {
   const { path: routePath, method, route, middleware: directoryMiddleware } = entry;
+  const adapterRoutePath = translateRoutePathForExpress(routePath);
   const chain: RoutedMiddleware<ExpressRouteContext>[] = [
     ...globalMiddleware,
     ...directoryMiddleware,
@@ -133,7 +143,11 @@ function registerRoute(
     }
   };
 
-  app[method](routePath, handler);
+  app[method](adapterRoutePath, handler);
+}
+
+function translateRoutePathForExpress(path: string): string {
+  return path.replace(/:(\w+)\*/g, "*$1");
 }
 
 // ---------------------------------------------------------------------------
@@ -207,7 +221,15 @@ async function runHandler(
 
   let params: unknown;
   if (schemas.params) {
-    const result = await validateSchema(schemas.params, req.params);
+    const matchedParams = matchRoutePath(routePath, getPathname(req.url));
+    if (!matchedParams) {
+      throw new RouteError(500, `Route matched but param extraction failed for ${method.toUpperCase()} ${routePath}`);
+    }
+
+    const result = await validateSchema(
+      schemas.params,
+      matchedParams,
+    );
     if (!result.success) {
       return new Response(
         JSON.stringify({ error: "Validation failed", target: "params", issues: result.issues }),
