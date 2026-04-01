@@ -61,21 +61,18 @@ async function runOpenAPI() {
     process.exit(1);
   }
 
-  // Ensure the manifest is up to date
+  console.log(`routed: using config ${path.relative(cwd, configPath)}`);
   console.log(`routed: scanning ${path.relative(cwd, config.routesDir)}`);
   const genResult = await generate({
     routesDir: config.routesDir,
     outFile: config.outFile,
+    framework: config.framework,
   });
   console.log(
-    `routed: generated ${path.relative(cwd, config.outFile)} (${genResult.routeCount} routes)`,
+    `routed: generated ${path.relative(cwd, config.outFile)} (${genResult.routeCount} routes, ${genResult.middlewareCount} middleware)`,
   );
 
-  // Import the generated route tree
-  const { pathToFileURL } = await import("node:url");
-  const manifestUrl = pathToFileURL(config.outFile).toString();
-  const manifest = await import(manifestUrl);
-  const routeTree = manifest.routeTree;
+  const routeTree = await loadGeneratedRouteTree(config.outFile);
 
   // Generate the OpenAPI spec
   const { generateOpenAPISpec } = await import("../openapi/index.ts");
@@ -94,6 +91,20 @@ async function runOpenAPI() {
 
   await Bun.write(outFile, JSON.stringify(spec, null, 2) + "\n");
   console.log(`routed: wrote ${path.relative(cwd, outFile)}`);
+}
+
+async function loadGeneratedRouteTree(outFile: string) {
+  const { pathToFileURL } = await import("node:url");
+  const manifestUrl = `${pathToFileURL(outFile).toString()}?t=${Date.now()}`;
+  const manifest = await import(manifestUrl);
+
+  if (!manifest.routeTree) {
+    throw new Error(
+      `Generated file did not export routeTree: ${path.basename(outFile)}`,
+    );
+  }
+
+  return manifest.routeTree;
 }
 
 async function runDev() {

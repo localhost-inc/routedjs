@@ -7,7 +7,6 @@
       "dependencies": {
         "@standard-schema/spec": "^1.1.0",
         "chokidar": "^4.0.0",
-        "zod-to-json-schema": "^3.25.2",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -15,7 +14,7 @@
         "@types/koa": "^3.0.2",
         "elysia": "^1.4.28",
         "express": "^5.2.1",
-        "hono": "^4",
+        "hono": "4.12.9",
         "koa": "^3.2.0",
         "mitata": "^1.0.34",
         "tsup": "^8.5.1",
@@ -27,13 +26,14 @@
         "hono": "^4",
         "koa": "^2 || ^3",
         "typescript": "^5",
-        "zod": "^3",
+        "zod-to-json-schema": "^3",
       },
       "optionalPeers": [
         "elysia",
         "express",
         "hono",
         "koa",
+        "zod-to-json-schema",
       ],
     },
   },
@@ -453,8 +453,6 @@
     "wrappy": ["wrappy@1.0.2", "", {}, "sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ=="],
 
     "zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
-
-    "zod-to-json-schema": ["zod-to-json-schema@3.25.2", "", { "peerDependencies": { "zod": "^3.25.28 || ^4" } }, "sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA=="],
 
     "express/cookie": ["cookie@0.7.2", "", {}, "sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w=="],
 

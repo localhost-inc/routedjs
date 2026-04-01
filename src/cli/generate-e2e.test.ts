@@ -354,8 +354,10 @@ describe("generate (end-to-end)", () => {
 
     const content = await readFile(outFile, "utf-8");
 
+    expect(content).toContain('import { defineRouteTree } from "routedjs"');
     expect(content).toContain('import { Hono } from "hono"');
     expect(content).toContain('import { routeHandler, wrapMiddleware } from "routedjs/hono"');
+    expect(content).toContain("export const routeTree = defineRouteTree([");
     expect(content).toContain('.use("*", wrapMiddleware(middleware0))');
     expect(content).toContain('.use("/users/admin/*", wrapMiddleware(middleware1))');
     expect(content).toMatch(/\.get\("\/storage\/:path\{\.\+\}", routeHandler\(route\d+, "\/storage\/:path\*"\)\)/);

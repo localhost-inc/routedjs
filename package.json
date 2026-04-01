@@ -1,6 +1,6 @@
 {
   "name": "routedjs",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "type": "module",
   "description": "File-system routing for APIs. Drop a file, get an endpoint.",
   "license": "MIT",
@@ -133,7 +133,7 @@
     "@types/koa": "^3.0.2",
     "elysia": "^1.4.28",
     "express": "^5.2.1",
-    "hono": "^4",
+    "hono": "4.12.9",
     "koa": "^3.2.0",
     "mitata": "^1.0.34",
     "tsup": "^8.5.1",

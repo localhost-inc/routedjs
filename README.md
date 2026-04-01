@@ -70,13 +70,23 @@ export default defineConfig({
 routed generate
 ```
 
-This scans your routes directory and writes `routed.gen.ts` — a native, fully typed app for your framework:
+This scans your routes directory and writes `routed.gen.ts` with both the shared `routeTree` manifest and a native, fully typed app for your framework:
 
 ```ts
 // routed.gen.ts (auto-generated)
+import { defineRouteTree } from "routedjs";
 import { Hono } from "hono";
 import { routeHandler, wrapMiddleware } from "routedjs/hono";
 import route0 from "./routes/users/$userId.get.route.ts";
+
+export const routeTree = defineRouteTree([
+  {
+    path: "/users/:userId",
+    method: "get",
+    route: route0,
+    middleware: [],
+  },
+]);
 
 export const app = new Hono()
   .get("/users/:userId", routeHandler(route0, "/users/:userId"));
@@ -278,7 +288,7 @@ state through global or directory middleware.
 
 ## Frameworks
 
-Set `framework` in your config and `routed generate` produces a native, typed app for that framework. Your route files stay the same — only the generated output changes.
+Set `framework` in your config and `routed generate` produces a native, typed app for that framework while still exporting the shared `routeTree`. Your route files stay the same — only the generated output changes.
 
 ### Hono
 
@@ -324,9 +334,9 @@ import { app } from "./routed.gen";
 app.listen(3000);
 ```
 
-### Without `framework` (generic route tree)
+### Without `framework` (generic route tree only)
 
-If you omit `framework`, the generated file exports a framework-agnostic `routeTree` that you wire into any framework at runtime:
+If you omit `framework`, the generated file exports just the framework-agnostic `routeTree` that you wire into any framework at runtime:
 
 ```ts
 import { createHonoApp } from "routedjs/hono";
@@ -449,7 +459,7 @@ routed openapi
 
 ### `routed generate`
 
-One-shot codegen. Scans your routes directory and writes the manifest (and client, if configured).
+One-shot codegen. Scans your routes directory and writes `routeTree`, plus a typed framework app when `framework` is configured (and client output, if configured).
 
 ### `routed dev`
 
