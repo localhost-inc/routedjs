@@ -38,6 +38,8 @@ describe("generateClientCode", () => {
     expect(code).toContain('"post /users"');
     expect(code).toContain('"get /users/:userId"');
     expect(code).toContain('"get /storage/:path*"');
+    expect(code).toContain("type PrimarySuccessResponse<T> =");
+    expect(code).toContain('response: SchemaType<InferSchema<typeof route0> extends { responses: infer R } ? PrimarySuccessResponse<R> : InferSchema<typeof route0> extends { response: infer R } ? R : undefined>;');
 
     // Exports createApiClient factory
     expect(code).toContain("export function createApiClient");

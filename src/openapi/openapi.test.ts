@@ -63,7 +63,10 @@ const routeTree = defineRouteTree([
       },
       schemas: {
         params: z.object({ userId: z.string().uuid() }),
-        response: z.object({ id: z.string(), name: z.string() }),
+        responses: {
+          200: z.object({ id: z.string(), name: z.string() }),
+          404: z.object({ error: z.string() }),
+        },
       },
       handler: async ({ params }) => ({ id: params.userId, name: "Kyle" }),
     }),
@@ -189,13 +192,14 @@ describe("generateOpenAPISpec", () => {
     expect(schema.properties).toBeDefined();
   });
 
-  test("generates response schema", () => {
+  test("generates status-aware response schemas", () => {
     const getUser = spec.paths["/users/{userId}"]!.get as Record<string, unknown>;
     const responses = getUser.responses as Record<string, Record<string, unknown>>;
     const ok = responses["200"]!;
     expect(ok.description).toBe("Get user by ID");
     const content = ok.content as Record<string, unknown>;
     expect(content["application/json"]).toBeDefined();
+    expect(responses["404"]?.description).toBe("Response 404");
   });
 
   test("marks deprecated routes", () => {
@@ -226,7 +230,10 @@ describe("generateOpenAPISpec", () => {
           route: {
             schemas: {
               params: z.object({ userId: z.string().uuid() }),
-              response: z.object({ id: z.string() }),
+              responses: {
+                200: z.object({ id: z.string() }),
+                404: z.object({ error: z.string() }),
+              },
             },
             middleware: [],
             handler: () => ({ id: "1" }),
@@ -258,5 +265,6 @@ describe("generateOpenAPISpec", () => {
     expect(getUser.parameters?.[0]?.schema?.type).toBe("string");
     expect(getUser.parameters?.[0]?.schema?.format).toBe("uuid");
     expect(getUser.responses["200"]?.content?.["application/json"]).toBeDefined();
+    expect(getUser.responses["404"]?.content?.["application/json"]).toBeDefined();
   });
 });

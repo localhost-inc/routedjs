@@ -683,6 +683,57 @@ function buildResponseValidationRouteTree(): RouteTree {
       }),
       middleware: [],
     },
+    // Buffered 201 status uses the matching response schema
+    {
+      path: "/created-response",
+      method: "get",
+      route: createRoute({
+        schemas: {
+          responses: {
+            201: z.object({ id: z.string(), created: z.literal(true) }),
+          },
+        },
+        handler: async ({ ctx }) => {
+          ctx.status(201);
+          return { id: "new-1", created: true as const };
+        },
+      }),
+      middleware: [],
+    },
+    // Buffered 404 status uses the matching response schema
+    {
+      path: "/not-found-response",
+      method: "get",
+      route: createRoute({
+        schemas: {
+          responses: {
+            404: z.object({ error: z.string() }),
+          },
+        },
+        handler: async ({ ctx }) => {
+          ctx.status(404);
+          return { error: "missing" };
+        },
+      }),
+      middleware: [],
+    },
+    // Wrong 201 response — should fail with validateResponses
+    {
+      path: "/bad-created-response",
+      method: "get",
+      route: createRoute({
+        schemas: {
+          responses: {
+            201: z.object({ id: z.string(), created: z.literal(true) }),
+          },
+        },
+        handler: (async ({ ctx }: { ctx: { status: (code: number) => void } }) => {
+          ctx.status(201);
+          return { wrong: "field" };
+        }) as never,
+      }),
+      middleware: [],
+    },
     // No response schema — should always pass
     {
       path: "/no-schema",
@@ -722,6 +773,31 @@ function responseValidationTests(
     expect(res.status).toBe(200);
     const json = (await res.json()) as { id: string; name: string };
     expect(json.id).toBe("1");
+  });
+
+  test("status-aware success response passes with validateResponses enabled", async () => {
+    const { withValidation } = getCtx();
+    const res = await withValidation("GET", "/created-response");
+    expect(res.status).toBe(201);
+    const json = (await res.json()) as { id: string; created: true };
+    expect(json).toEqual({ id: "new-1", created: true });
+  });
+
+  test("status-aware error response validates against the matching status schema", async () => {
+    const { withValidation } = getCtx();
+    const res = await withValidation("GET", "/not-found-response");
+    expect(res.status).toBe(404);
+    const json = (await res.json()) as { error: string };
+    expect(json).toEqual({ error: "missing" });
+  });
+
+  test("status-aware bad response returns 500 when validateResponses is enabled", async () => {
+    const { withValidation } = getCtx();
+    const res = await withValidation("GET", "/bad-created-response");
+    expect(res.status).toBe(500);
+    const json = (await res.json()) as { error: string; data: { issues: unknown[] } };
+    expect(json.error).toContain("Response validation failed");
+    expect(json.data.issues.length).toBeGreaterThan(0);
   });
 
   test("no response schema — always passes", async () => {

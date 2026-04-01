@@ -9,6 +9,8 @@ export type { RouteContext } from "./core/context.ts";
 
 export type {
   HttpMethod,
+  ResponseSchemaMap,
+  ResponseStatus,
   RouteSchemas,
   RouteMeta,
   HandlerInput,

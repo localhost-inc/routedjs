@@ -41,13 +41,19 @@ const routeTree = defineRouteTree([
     route: createRoute({
       schemas: {
         body: z.object({ name: z.string(), email: z.string().email() }),
-        response: z.object({ id: z.string(), name: z.string(), email: z.string() }),
+        responses: {
+          201: z.object({ id: z.string(), name: z.string(), email: z.string() }),
+          400: z.object({ error: z.string() }),
+        },
       },
-      handler: async ({ body }) => ({
-        id: "new-1",
-        name: body.name,
-        email: body.email,
-      }),
+      handler: async ({ body, ctx }) => {
+        ctx.status(201);
+        return {
+          id: "new-1",
+          name: body.name,
+          email: body.email,
+        };
+      },
     }),
     middleware: [],
   },
@@ -170,7 +176,7 @@ describe("createClient", () => {
     const res = await client.users.post({
       body: { name: "Bob", email: "bob@example.com" },
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     expect(res.data.name).toBe("Bob");
     expect(res.data.email).toBe("bob@example.com");
     expect(res.data.id).toBe("new-1");

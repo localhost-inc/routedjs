@@ -157,7 +157,10 @@ export default createRoute({
     params: z.object({ userId: z.string().uuid() }),
     query: z.object({ limit: z.coerce.number().optional() }),
     body: z.object({ name: z.string(), email: z.string().email() }),
-    response: z.object({ id: z.string() }),
+    responses: {
+      200: z.object({ id: z.string() }),
+      404: z.object({ error: z.string() }),
+    },
   },
   handler: async ({ params, query, body }) => {
     // params, query, body are typed and validated
@@ -271,13 +274,13 @@ Types are inferred from your schemas at compile time. At runtime, the client is 
 
 ## Response validation
 
-Adapters can optionally validate handler return values against your `response` schema. Off by default — enable it to catch handler bugs during development:
+Adapters can optionally validate handler return values against your `responses` schemas. Off by default — enable it to catch handler bugs during development:
 
 ```ts
 const app = createHonoApp(routeTree, { validateResponses: true });
 ```
 
-When enabled, if a handler returns data that doesn't match the response schema, the adapter throws a 500 with the validation issues. Available on all four adapters.
+When enabled, routedjs validates plain-object returns against the schema matching the buffered response status. Available on all four adapters.
 
 ## OpenAPI
 
@@ -305,7 +308,10 @@ export default createRoute({
   },
   schemas: {
     params: z.object({ userId: z.string().uuid() }),
-    response: z.object({ id: z.string(), name: z.string() }),
+    responses: {
+      200: z.object({ id: z.string(), name: z.string() }),
+      404: z.object({ error: z.string() }),
+    },
   },
   handler: async ({ params }) => ({ id: params.userId, name: "Kyle" }),
 });

@@ -24,7 +24,12 @@ export type RouteSchemas = {
   query?: StandardSchemaV1;
   body?: StandardSchemaV1;
   response?: StandardSchemaV1;
+  responses?: ResponseSchemaMap;
 };
+
+export type ResponseStatus = number | `${number}`;
+
+export type ResponseSchemaMap = Partial<Record<ResponseStatus, StandardSchemaV1>>;
 
 // ---------------------------------------------------------------------------
 // Middleware
@@ -77,6 +82,12 @@ type InferOptional<T extends StandardSchemaV1 | undefined> = T extends StandardS
   ? StandardSchemaV1.InferOutput<T>
   : undefined;
 
+type InferSchemaOutput<T> = T extends StandardSchemaV1 ? StandardSchemaV1.InferOutput<T> : never;
+
+type InferResponsesOutput<T extends ResponseSchemaMap | undefined> = T extends ResponseSchemaMap
+  ? InferSchemaOutput<T[keyof T]>
+  : never;
+
 export type HandlerInput<
   TSchemas extends RouteSchemas,
   TState extends Record<string, unknown> = Record<string, never>,
@@ -88,8 +99,10 @@ export type HandlerInput<
 };
 
 type HandlerReturn<TSchemas extends RouteSchemas> =
-  TSchemas["response"] extends StandardSchemaV1
-    ? StandardSchemaV1.InferOutput<TSchemas["response"]> | Response
+  TSchemas["responses"] extends ResponseSchemaMap
+    ? InferResponsesOutput<TSchemas["responses"]> | Response
+    : TSchemas["response"] extends StandardSchemaV1
+      ? StandardSchemaV1.InferOutput<TSchemas["response"]> | Response
     : unknown;
 
 export type HandlerFn<
@@ -120,7 +133,7 @@ export type RouteDefinition<TSchemas extends RouteSchemas = RouteSchemas> = {
   schemas: TSchemas;
   meta?: RouteMeta;
   middleware: MiddlewareDefinition<any>[];
-  handler: HandlerFn<TSchemas, any>;
+  handler: (input: any) => unknown | Promise<unknown>;
 };
 
 // ---------------------------------------------------------------------------
@@ -130,7 +143,7 @@ export type RouteDefinition<TSchemas extends RouteSchemas = RouteSchemas> = {
 export type RouteEntry = {
   path: string;
   method: HttpMethod;
-  route: RouteDefinition;
+  route: RouteDefinition<any>;
   /** Directory middleware, ordered root → leaf. */
   middleware: MiddlewareDefinition<any>[];
 };

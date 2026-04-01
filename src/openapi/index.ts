@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { extractParamNames, extractSplatParamNames, toOpenAPIPath } from "../core/path.ts";
+import { getResponseSchemas } from "../core/responses.ts";
 import type { RouteEntry, RouteTree } from "../core/types.ts";
 
 const require = createRequire(import.meta.url);
@@ -103,22 +104,32 @@ function buildOperation(entry: RouteEntry): Record<string, unknown> {
   }
 
   // Responses
-  if (schemas.response) {
-    const responseSchema = schemaToJsonSchema(schemas.response);
-    operation.responses = {
-      "200": {
-        description: meta?.summary ?? "Successful response",
-        ...(responseSchema
-          ? {
-              content: {
-                "application/json": {
-                  schema: responseSchema,
-                },
-              },
-            }
-          : {}),
-      },
-    };
+  const responseSchemas = getResponseSchemas(schemas);
+
+  if (responseSchemas.size > 0) {
+    operation.responses = Object.fromEntries(
+      Array.from(responseSchemas.entries())
+        .sort(([leftStatus], [rightStatus]) => leftStatus - rightStatus)
+        .map(([status, schema]) => {
+          const responseSchema = schemaToJsonSchema(schema);
+
+          return [
+            String(status),
+            {
+              description: getResponseDescription(status, meta?.summary),
+              ...(responseSchema
+                ? {
+                    content: {
+                      "application/json": {
+                        schema: responseSchema,
+                      },
+                    },
+                  }
+                : {}),
+            },
+          ];
+        }),
+    );
   } else {
     operation.responses = {
       "200": {
@@ -259,6 +270,14 @@ function deriveOperationId(path: string, method: string): string {
     });
 
   return method + segments.join("");
+}
+
+function getResponseDescription(status: number, summary?: string): string {
+  if (status >= 200 && status < 300) {
+    return summary ?? "Successful response";
+  }
+
+  return `Response ${status}`;
 }
 
 function capitalize(str: string): string {

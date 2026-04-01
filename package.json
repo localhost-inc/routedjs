@@ -64,7 +64,7 @@
     }
   },
   "bin": {
-    "routed": "./bin/routed"
+    "routed": "bin/routed"
   },
   "files": [
     "bin",

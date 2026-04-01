@@ -8,6 +8,7 @@ import {
   getPathname,
   matchRoutePath,
 } from "../core/path.ts";
+import { getResponseSchemaForStatus } from "../core/responses.ts";
 import { validateSchema } from "../core/validate.ts";
 import type {
   MiddlewareDefinition,
@@ -211,8 +212,12 @@ function createTerminalHandler(
       return handlerResult;
     }
 
-    if (validateResponses && schemas.response) {
-      const validation = await validateSchema(schemas.response, handlerResult);
+    const responseSchema = validateResponses
+      ? getResponseSchemaForStatus(schemas, ctx.getBufferedStatus())
+      : undefined;
+
+    if (responseSchema) {
+      const validation = await validateSchema(responseSchema, handlerResult);
       if (!validation.success) {
         throw new RouteError(500, `Response validation failed for ${c.req.method} ${routePath}`, {
           issues: validation.issues,

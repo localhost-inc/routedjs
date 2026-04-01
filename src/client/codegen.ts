@@ -43,6 +43,16 @@ export function generateClientCode(options: GenerateClientOptions): string {
   lines.push("// Extract schema types from route definitions");
   lines.push("type InferSchema<T> = T extends { schemas: infer S } ? S : {};");
   lines.push("type SchemaType<T> = T extends StandardSchemaV1 ? StandardSchemaV1.InferOutput<T> : undefined;");
+  lines.push("type PrimarySuccessResponse<T> =");
+  lines.push("  T extends { 200: infer R } ? R :");
+  lines.push('  T extends { "200": infer R } ? R :');
+  lines.push("  T extends { 201: infer R } ? R :");
+  lines.push('  T extends { "201": infer R } ? R :');
+  lines.push("  T extends { 202: infer R } ? R :");
+  lines.push('  T extends { "202": infer R } ? R :');
+  lines.push("  T extends { 204: infer R } ? R :");
+  lines.push('  T extends { "204": infer R } ? R :');
+  lines.push("  undefined;");
   lines.push("");
 
   // Generate the RouteMap type
@@ -57,7 +67,7 @@ export function generateClientCode(options: GenerateClientOptions): string {
     lines.push(`    params: SchemaType<${schemas} extends { params: infer P } ? P : undefined>;`);
     lines.push(`    query: SchemaType<${schemas} extends { query: infer Q } ? Q : undefined>;`);
     lines.push(`    body: SchemaType<${schemas} extends { body: infer B } ? B : undefined>;`);
-    lines.push(`    response: SchemaType<${schemas} extends { response: infer R } ? R : undefined>;`);
+    lines.push(`    response: SchemaType<${schemas} extends { responses: infer R } ? PrimarySuccessResponse<R> : ${schemas} extends { response: infer R } ? R : undefined>;`);
     lines.push("  };");
   }
 
