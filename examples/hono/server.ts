@@ -1,7 +1,6 @@
-import { createHonoApp } from "routedjs/hono";
-import { routeTree } from "./routed.gen.ts";
+import { app } from "./routed.gen.ts";
 
-const app = createHonoApp(routeTree);
+export type { AppType } from "./routed.gen.ts";
 
 export default {
   fetch: app.fetch,

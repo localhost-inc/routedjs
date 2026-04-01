@@ -28,6 +28,8 @@ type GenerateOptions = {
   outFile: string;
   /** Absolute path to the client output file (optional). */
   clientOutFile?: string;
+  /** When set, outFile produces a typed framework app instead of a generic route tree. */
+  framework?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -263,15 +265,23 @@ export async function generate(options: GenerateOptions): Promise<{
   routeCount: number;
   middlewareCount: number;
 }> {
-  const { routesDir, outFile, clientOutFile } = options;
+  const { routesDir, outFile, clientOutFile, framework } = options;
 
   const [routes, middlewares] = await Promise.all([
     scanRoutes(routesDir),
     scanMiddleware(routesDir),
   ]);
 
-  const content = generateManifest(routes, middlewares, outFile, routesDir);
-  await Bun.write(outFile, content);
+  // When a framework is set, outFile produces a typed framework app.
+  // Otherwise, produce the generic route tree.
+  if (framework) {
+    const codegen = await resolveFrameworkCodegen(framework);
+    const content = await codegen({ routes, middlewares, outFile, routesDir });
+    await Bun.write(outFile, content);
+  } else {
+    const content = generateManifest(routes, middlewares, outFile, routesDir);
+    await Bun.write(outFile, content);
+  }
 
   if (clientOutFile) {
     const { generateClientCode } = await import("../client/codegen.ts");
@@ -287,6 +297,26 @@ export async function generate(options: GenerateOptions): Promise<{
     routeCount: routes.length,
     middlewareCount: middlewares.length,
   };
+}
+
+type FrameworkCodegenInput = {
+  routes: ScannedRoute[];
+  middlewares: ScannedMiddleware[];
+  outFile: string;
+  routesDir: string;
+};
+
+type FrameworkCodegen = (input: FrameworkCodegenInput) => string | Promise<string>;
+
+async function resolveFrameworkCodegen(framework: string): Promise<FrameworkCodegen> {
+  switch (framework) {
+    case "hono": {
+      const mod = await import("../adapters/hono.ts");
+      return mod.generateTypedApp as FrameworkCodegen;
+    }
+    default:
+      throw new Error(`Framework "${framework}" does not support typed app generation.`);
+  }
 }
 
 // Export for testing

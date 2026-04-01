@@ -31,6 +31,8 @@ export type RoutedConfig = {
     /** Output path for the generated type-safe client. Relative to cwd. */
     outFile: string;
   };
+  /** When set, outFile produces a typed framework app (chained calls) instead of a generic route tree. */
+  framework?: "hono" | "express" | "koa" | "elysia";
 };
 
 export function defineConfig(config: RoutedConfig): RoutedConfig {

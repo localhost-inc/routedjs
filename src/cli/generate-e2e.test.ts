@@ -336,4 +336,30 @@ describe("generate (end-to-end)", () => {
     expect(content).toContain('method: "patch"');
     expect(content).toContain('method: "delete"');
   });
+
+  test("generates a typed Hono app when framework is set", async () => {
+    const routesDir = path.join(tmpDir, "routes");
+    const outFile = path.join(tmpDir, "app.ts");
+
+    await writeMiddlewareFile(routesDir);
+    await writeMiddlewareFile(path.join(routesDir, "users", "admin"));
+    await writeRouteFile(routesDir, "users/admin/$userId.get.route.ts");
+    await writeRouteFile(routesDir, "storage/$$path.get.route.ts");
+
+    await generate({
+      routesDir,
+      outFile,
+      framework: "hono",
+    });
+
+    const content = await readFile(outFile, "utf-8");
+
+    expect(content).toContain('import { Hono } from "hono"');
+    expect(content).toContain('import { routeHandler, wrapMiddleware } from "routedjs/hono"');
+    expect(content).toContain('.use("*", wrapMiddleware(middleware0))');
+    expect(content).toContain('.use("/users/admin/*", wrapMiddleware(middleware1))');
+    expect(content).toMatch(/\.get\("\/storage\/:path\{\.\+\}", routeHandler\(route\d+, "\/storage\/:path\*"\)\)/);
+    expect(content).toMatch(/\.get\("\/users\/admin\/:userId", routeHandler\(route\d+, "\/users\/admin\/:userId"\)\)/);
+    expect(content).toContain("export type AppType = typeof app;");
+  });
 });

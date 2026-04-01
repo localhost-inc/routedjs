@@ -39,6 +39,7 @@ async function runGenerate() {
     routesDir: config.routesDir,
     outFile: config.outFile,
     clientOutFile,
+    framework: config.framework,
   });
 
   console.log(
