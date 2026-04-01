@@ -15,6 +15,15 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noUnusedLocals": false,
-    "noUnusedParameters": false
+    "noUnusedParameters": false,
+    "paths": {
+      "routedjs": ["./src/index.ts"],
+      "routedjs/hono": ["./src/frameworks/hono.ts"],
+      "routedjs/express": ["./src/frameworks/express.ts"],
+      "routedjs/koa": ["./src/frameworks/koa.ts"],
+      "routedjs/elysia": ["./src/frameworks/elysia.ts"],
+      "routedjs/openapi": ["./src/openapi/index.ts"],
+      "routedjs/client": ["./src/client/index.ts"]
+    }
   }
 }
