@@ -51,33 +51,45 @@ type MaybeTypedRouteContext<TState extends Record<string, unknown>> =
     ? RouteContext
     : TypedRouteContext<TState>;
 
-type MiddlewareContext<TState extends Record<string, unknown>> =
-  MaybeTypedRouteContext<EmptyState> & {
-    set<K extends string & keyof TState>(key: K, value: TState[K]): void;
+type MiddlewareContext<
+  TProvides extends Record<string, unknown>,
+  TRequires extends Record<string, unknown>,
+> = MaybeTypedRouteContext<TRequires> & {
+    set<K extends string & keyof TProvides>(key: K, value: TProvides[K]): void;
   };
 
 export type MiddlewareFn<
-  TState extends Record<string, unknown> = Record<string, unknown>,
+  TProvides extends Record<string, unknown> = EmptyState,
+  TRequires extends Record<string, unknown> = EmptyState,
 > = (input: {
-  ctx: MiddlewareContext<TState>;
+  ctx: MiddlewareContext<TProvides, TRequires>;
   next: () => Promise<unknown>;
 }) => unknown | Promise<unknown>;
 
-/** Phantom type `_state` carries the state shape for inference. Never set at runtime. */
+/** Phantom types carry the middleware contract for inference. Never set at runtime. */
 export type MiddlewareDefinition<
-  TState extends Record<string, unknown> = EmptyState,
+  TProvides extends Record<string, unknown> = EmptyState,
+  TRequires extends Record<string, unknown> = EmptyState,
 > = {
   __brand: "routed:middleware";
-  handler: MiddlewareFn<Record<string, unknown>>;
+  handler: MiddlewareFn<Record<string, unknown>, Record<string, unknown>>;
   /** @internal Phantom — do not access. */
-  readonly _state?: TState;
+  readonly _provides?: TProvides;
+  /** @internal Phantom — do not access. */
+  readonly _requires?: TRequires;
 };
 
 // ---------------------------------------------------------------------------
 // State inference helpers
 // ---------------------------------------------------------------------------
 
-type ExtractState<T> = T extends MiddlewareDefinition<infer S> ? S : EmptyState;
+type ExtractProvidedState<T> = T extends MiddlewareDefinition<infer S, any>
+  ? S
+  : EmptyState;
+
+type ExtractRequiredState<T> = T extends MiddlewareDefinition<any, infer S>
+  ? S
+  : EmptyState;
 
 type UnionToIntersection<U> = (
   U extends unknown ? (x: U) => void : never
@@ -86,8 +98,30 @@ type UnionToIntersection<U> = (
   : never;
 
 export type MergeMiddlewareState<T extends readonly unknown[]> = UnionToIntersection<
-  ExtractState<T[number]>
+  ExtractProvidedState<T[number]>
 > extends infer R extends Record<string, unknown> ? R : EmptyState;
+
+type ValidateMiddlewareChain<
+  TMiddleware extends readonly MiddlewareDefinition<any, any>[],
+  TAvailable extends Record<string, unknown> = EmptyState,
+> = TMiddleware extends readonly [
+  infer Head extends MiddlewareDefinition<any, any>,
+  ...infer Tail extends readonly MiddlewareDefinition<any, any>[],
+]
+  ? AvailableState<TAvailable> extends ExtractRequiredState<Head>
+    ? readonly [
+        Head,
+        ...ValidateMiddlewareChain<
+          Tail,
+          TAvailable & ExtractProvidedState<Head>
+        >,
+      ]
+    : never
+  : TMiddleware;
+
+export type ValidMiddlewareChain<
+  TMiddleware extends readonly MiddlewareDefinition<any, any>[],
+> = ValidateMiddlewareChain<TMiddleware>;
 
 // ---------------------------------------------------------------------------
 // Typed context — RouteContext with typed get() from middleware state
@@ -161,7 +195,7 @@ export type RouteDefinition<TSchemas extends RouteSchemas = RouteSchemas> = {
   __brand: "routed:route";
   schemas: TSchemas;
   meta?: RouteMeta;
-  middleware: MiddlewareDefinition<any>[];
+  middleware: MiddlewareDefinition<any, any>[];
   handler: (input: any) => unknown | Promise<unknown>;
 };
 
@@ -174,7 +208,7 @@ export type RouteEntry = {
   method: HttpMethod;
   route: RouteDefinition<any>;
   /** Directory middleware, ordered root → leaf. */
-  middleware: MiddlewareDefinition<any>[];
+  middleware: MiddlewareDefinition<any, any>[];
 };
 
 export type RouteTree = RouteEntry[];

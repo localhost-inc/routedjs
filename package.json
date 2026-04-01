@@ -1,6 +1,6 @@
 {
   "name": "routedjs",
-  "version": "0.0.3",
+  "version": "0.0.5",
   "type": "module",
   "description": "File-system routing for APIs. Drop a file, get an endpoint.",
   "license": "MIT",

@@ -100,7 +100,7 @@ type CreateElysiaAppOptions = {
   /** Validate handler return values against response schemas. Off by default. */
   validateResponses?: boolean;
   /** Global middleware that runs BEFORE directory middleware for every route. */
-  middleware?: MiddlewareDefinition<any>[];
+  middleware?: MiddlewareDefinition<any, any>[];
 };
 
 /**
@@ -129,7 +129,7 @@ type PreparedRoute = RouteEntry & {
 function prepareRoute(
   entry: RouteEntry,
   validateResponses: boolean,
-  globalMiddleware: MiddlewareDefinition<any>[],
+  globalMiddleware: MiddlewareDefinition<any, any>[],
 ): PreparedRoute {
   const { path: routePath, route, middleware: directoryMiddleware } = entry;
 

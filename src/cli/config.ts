@@ -4,7 +4,7 @@ import type { MiddlewareDefinition } from "../core/types.ts";
 
 export type RoutedConfig = {
   /** Global middleware applied to all routes (runs before directory middleware). */
-  middleware?: MiddlewareDefinition<any>[];
+  middleware?: MiddlewareDefinition<any, any>[];
   /** Path to the routes directory (relative to config file or cwd). */
   routesDir: string;
   /** Path to the generated output file. */

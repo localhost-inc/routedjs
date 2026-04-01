@@ -63,7 +63,7 @@ type CreateHonoAppOptions = {
   /** Validate handler return values against response schemas. Off by default. */
   validateResponses?: boolean;
   /** Global middleware that runs before directory middleware for every route. */
-  middleware?: MiddlewareDefinition<any>[];
+  middleware?: MiddlewareDefinition<any, any>[];
 };
 
 /**
@@ -96,7 +96,7 @@ function registerRoute(
   app: Hono,
   entry: RouteEntry,
   validateResponses: boolean,
-  globalMiddleware: MiddlewareDefinition<any>[],
+  globalMiddleware: MiddlewareDefinition<any, any>[],
 ) {
   const { path: routePath, method, route, middleware: directoryMiddleware } = entry;
   const adapterRoutePath = translateRoutePathForHono(routePath);

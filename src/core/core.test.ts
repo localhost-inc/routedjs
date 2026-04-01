@@ -243,7 +243,7 @@ describe("context state", () => {
     expect(ctx.get("b")).toBe(42);
   });
 
-  test("middleware state flows to handler via createMiddleware<TState>", () => {
+  test("middleware state flows to handler via createMiddleware<TProvides>", () => {
     type User = { id: string; name: string };
     const auth = createMiddleware<{ user: User }>(async ({ ctx, next }) => {
       ctx.set("user", { id: "1", name: "Kyle" });
@@ -261,6 +261,70 @@ describe("context state", () => {
     });
 
     expect(ctx.get("user")).toEqual({ id: "1", name: "Kyle" });
+  });
+
+  test("middleware can require state from earlier middleware", () => {
+    type User = { id: string; name: string };
+
+    const auth = createMiddleware<{ user: User }>(async ({ ctx, next }) => {
+      ctx.set("user", { id: "1", name: "Kyle" });
+      await next();
+    });
+
+    const subject = createMiddleware<
+      { subjectId: string },
+      { user: User }
+    >(async ({ ctx, next }) => {
+      const db = ctx.get("db");
+      const user = ctx.get("user");
+
+      const result: string = db.query();
+      ctx.set("subjectId", `${user.id}:${result}`);
+      await next();
+    });
+
+    const route = createRoute({
+      middleware: [auth, subject],
+      handler: ({ ctx }) => {
+        const user = ctx.get("user");
+        const subjectId = ctx.get("subjectId");
+
+        return { userId: user.id, subjectId };
+      },
+    });
+
+    expect(route.middleware).toHaveLength(2);
+  });
+
+  test("middleware order is type-checked", () => {
+    type User = { id: string; name: string };
+
+    const auth = createMiddleware<{ user: User }>(async ({ next }) => {
+      await next();
+    });
+
+    const subject = createMiddleware<
+      { subjectId: string },
+      { user: User }
+    >(async ({ next }) => {
+      await next();
+    });
+
+    createRoute({
+      middleware: [auth, subject],
+      handler: ({ ctx }) => {
+        const subjectId: string = ctx.get("subjectId");
+        return { subjectId };
+      },
+    });
+
+    createRoute({
+      // @ts-expect-error subject requires auth state before it runs
+      middleware: [subject, auth],
+      handler: () => ({ ok: true }),
+    });
+
+    expect(true).toBe(true);
   });
 
   test("declared app context flows to middleware and handler types", () => {

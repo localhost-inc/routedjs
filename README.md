@@ -145,6 +145,37 @@ export default createMiddleware(async ({ ctx, next }) => {
 
 Middleware stacks root-first: root `_middleware.ts` runs first, then nested directories, then per-route middleware, then the handler.
 
+If a middleware adds typed state, pass that as the first generic to
+`createMiddleware<TProvides>()`. If it depends on state from an earlier
+middleware, pass the required state as the second generic:
+
+```ts
+import { createMiddleware, createRoute } from "routedjs";
+
+const auth = createMiddleware<{ user: { id: string } }>(async ({ ctx, next }) => {
+  ctx.set("user", { id: "123" });
+  await next();
+});
+
+const subject = createMiddleware<
+  { subjectId: string },
+  { user: { id: string } }
+>(async ({ ctx, next }) => {
+  ctx.set("subjectId", ctx.get("user").id);
+  await next();
+});
+
+export default createRoute({
+  middleware: [auth, subject],
+  handler: ({ ctx }) => ({
+    userId: ctx.get("user").id,
+    subjectId: ctx.get("subjectId"),
+  }),
+});
+```
+
+Middleware order is type-checked, so `subject` cannot be listed before `auth`.
+
 ## Validation
 
 Schemas are optional and work with any [Standard Schema](https://standardschema.dev/) validator — Zod, Valibot, ArkType, or anything else that implements the spec. When provided, the adapter validates automatically and returns 400 with structured errors on failure.

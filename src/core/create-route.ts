@@ -6,13 +6,20 @@ import type {
   RouteDefinition,
   RouteMeta,
   RouteSchemas,
+  ValidMiddlewareChain,
 } from "./types.ts";
 
 function normalizeMiddleware(
-  input: MiddlewareDefinition<any> | MiddlewareFn,
-): MiddlewareDefinition<any> {
+  input: MiddlewareDefinition<any, any> | MiddlewareFn,
+): MiddlewareDefinition<any, any> {
   if (typeof input === "function") {
-    return { __brand: "routed:middleware", handler: input as MiddlewareFn<Record<string, unknown>> };
+    return {
+      __brand: "routed:middleware",
+      handler: input as MiddlewareFn<
+        Record<string, unknown>,
+        Record<string, unknown>
+      >,
+    };
   }
   return input;
 }
@@ -20,19 +27,19 @@ function normalizeMiddleware(
 // Overload 1: with typed middleware → state flows into handler
 export function createRoute<
   TSchemas extends RouteSchemas,
-  const TMiddleware extends readonly MiddlewareDefinition<any>[],
+  const TMiddleware extends readonly MiddlewareDefinition<any, any>[],
 >(options: {
   schemas?: TSchemas;
   meta?: RouteMeta;
-  middleware: [...TMiddleware];
+  middleware: [...TMiddleware] & ValidMiddlewareChain<TMiddleware>;
   handler: NoInfer<HandlerFn<TSchemas, MergeMiddlewareState<TMiddleware>>>;
 }): RouteDefinition<TSchemas>;
 
-// Overload 2: no middleware or inline functions
+// Overload 2: no middleware or inline-only middleware
 export function createRoute<TSchemas extends RouteSchemas = RouteSchemas>(options: {
   schemas?: TSchemas;
   meta?: RouteMeta;
-  middleware?: (MiddlewareDefinition<any> | MiddlewareFn)[];
+  middleware?: MiddlewareFn[];
   handler: HandlerFn<TSchemas>;
 }): RouteDefinition<TSchemas>;
 
@@ -41,7 +48,7 @@ export function createRoute(
   options: {
     schemas?: RouteSchemas;
     meta?: RouteMeta;
-    middleware?: (MiddlewareDefinition<any> | MiddlewareFn)[];
+    middleware?: (MiddlewareDefinition<any, any> | MiddlewareFn)[];
     handler: HandlerFn<any, any>;
   },
 ): RouteDefinition {
