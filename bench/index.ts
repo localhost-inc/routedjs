@@ -5,10 +5,10 @@ import { createRoute } from "../src/core/create-route.ts";
 import { createMiddleware } from "../src/core/create-middleware.ts";
 import { defineRouteTree } from "../src/core/define-route-tree.ts";
 import type { RouteTree, MiddlewareDefinition } from "../src/core/types.ts";
-import { createHonoApp } from "../src/adapters/hono.ts";
-import { createKoaApp } from "../src/adapters/koa.ts";
-import { createElysiaApp } from "../src/adapters/elysia.ts";
-import { createExpressApp } from "../src/adapters/express.ts";
+import { createHonoApp } from "../src/frameworks/hono.ts";
+import { createKoaApp } from "../src/frameworks/koa.ts";
+import { createElysiaApp } from "../src/frameworks/elysia.ts";
+import { createExpressApp } from "../src/frameworks/express.ts";
 import { generate } from "../src/cli/generate.ts";
 
 // ---------------------------------------------------------------------------

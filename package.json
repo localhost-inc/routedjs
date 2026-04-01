@@ -21,31 +21,31 @@
       }
     },
     "./hono": {
-      "bun": "./src/adapters/hono.ts",
+      "bun": "./src/frameworks/hono.ts",
       "import": {
-        "types": "./dist/adapters/hono.d.ts",
-        "default": "./dist/adapters/hono.js"
+        "types": "./dist/frameworks/hono.d.ts",
+        "default": "./dist/frameworks/hono.js"
       }
     },
     "./koa": {
-      "bun": "./src/adapters/koa.ts",
+      "bun": "./src/frameworks/koa.ts",
       "import": {
-        "types": "./dist/adapters/koa.d.ts",
-        "default": "./dist/adapters/koa.js"
+        "types": "./dist/frameworks/koa.d.ts",
+        "default": "./dist/frameworks/koa.js"
       }
     },
     "./elysia": {
-      "bun": "./src/adapters/elysia.ts",
+      "bun": "./src/frameworks/elysia.ts",
       "import": {
-        "types": "./dist/adapters/elysia.d.ts",
-        "default": "./dist/adapters/elysia.js"
+        "types": "./dist/frameworks/elysia.d.ts",
+        "default": "./dist/frameworks/elysia.js"
       }
     },
     "./express": {
-      "bun": "./src/adapters/express.ts",
+      "bun": "./src/frameworks/express.ts",
       "import": {
-        "types": "./dist/adapters/express.d.ts",
-        "default": "./dist/adapters/express.js"
+        "types": "./dist/frameworks/express.d.ts",
+        "default": "./dist/frameworks/express.js"
       }
     },
     "./openapi": {

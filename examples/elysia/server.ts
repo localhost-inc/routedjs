@@ -1,7 +1,4 @@
-import { createElysiaApp } from "routedjs/elysia";
-import { routeTree } from "./routed.gen.ts";
-
-const app = createElysiaApp(routeTree);
+import { app } from "./routed.gen.ts";
 
 app.listen(3333);
 

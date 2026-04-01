@@ -23,7 +23,7 @@ function makeTrackingMiddleware(label: string): MiddlewareDefinition {
 }
 
 // ---------------------------------------------------------------------------
-// Route tree (shared across all adapters)
+// Route tree (shared across all frameworks)
 // ---------------------------------------------------------------------------
 
 const dirMw1 = makeTrackingMiddleware("dir1");

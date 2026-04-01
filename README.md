@@ -2,7 +2,7 @@
 
 File-system routing for APIs. Drop a file, get an endpoint.
 
-Your file tree is your routing table. No manual route registration, no path strings to keep in sync. Routed scans your routes directory, derives URL paths from the file system, and generates a framework-agnostic route manifest. Adapters wire it into the framework of your choice.
+Your file tree is your routing table. No manual route registration, no path strings to keep in sync. Routed scans your routes directory, derives URL paths from the file system, and generates a framework-agnostic route manifest. Frameworks are supported via codegen — set your framework and get a native, typed app.
 
 ```
 routes/
@@ -57,6 +57,7 @@ import { defineConfig } from "routedjs";
 export default defineConfig({
   routesDir: "./routes",
   outFile: "./routed.gen.ts",
+  framework: "hono",
   dev: {
     command: "bun run server.ts",
   },
@@ -69,33 +70,30 @@ export default defineConfig({
 routed generate
 ```
 
-This scans your routes directory and writes `routed.gen.ts` — a framework-agnostic route manifest:
+This scans your routes directory and writes `routed.gen.ts` — a native, fully typed app for your framework:
 
 ```ts
 // routed.gen.ts (auto-generated)
-import { defineRouteTree } from "routedjs";
+import { Hono } from "hono";
+import { routeHandler, wrapMiddleware } from "routedjs/hono";
 import route0 from "./routes/users/$userId.get.route.ts";
 
-export const routeTree = defineRouteTree([
-  { path: "/users/:userId", method: "get", route: route0, middleware: [] },
-]);
+export const app = new Hono()
+  .get("/users/:userId", routeHandler(route0, "/users/:userId"));
+
+export type AppType = typeof app;
 ```
 
 ### 4. Serve
 
-Pick an adapter and create your server:
-
 ```ts
 // server.ts
-import { createHonoApp } from "routedjs/hono";
-import { routeTree } from "./routed.gen";
-
-const app = createHonoApp(routeTree);
+import { app } from "./routed.gen";
 
 export default { fetch: app.fetch, port: 3000 };
 ```
 
-That's it. The same route files work with any adapter — swap `routedjs/hono` for `routedjs/koa`, `routedjs/express`, or `routedjs/elysia` and nothing else changes.
+That's it. The generated app is a native Hono/Express/Koa/Elysia app — fully typed, ready to use. Change `framework` in your config to switch frameworks; the route files stay the same.
 
 ## File conventions
 
@@ -178,7 +176,7 @@ Middleware order is type-checked, so `subject` cannot be listed before `auth`.
 
 ## Validation
 
-Schemas are optional and work with any [Standard Schema](https://standardschema.dev/) validator — Zod, Valibot, ArkType, or anything else that implements the spec. When provided, the adapter validates automatically and returns 400 with structured errors on failure.
+Schemas are optional and work with any [Standard Schema](https://standardschema.dev/) validator — Zod, Valibot, ArkType, or anything else that implements the spec. When provided, routedjs validates automatically and returns 400 with structured errors on failure.
 
 ```ts
 import { z } from "zod"; // or valibot, arktype, etc.
@@ -219,7 +217,7 @@ export default createRoute({
 });
 ```
 
-`ctx.request` works the same way across adapters, including request-body reads:
+`ctx.request` works the same way across frameworks, including request-body reads:
 
 ```ts
 export default createRoute({
@@ -275,44 +273,68 @@ export default createRoute({
 
 On Hono, routed automatically bridges app-level `c.set(...)` / `c.get(...)`
 values into routed `ctx.get(...)`, and mirrors routed `ctx.set(...)` back to
-the underlying Hono context. Other adapters can provide equivalent runtime
+the underlying Hono context. Other frameworks can provide equivalent runtime
 state through global or directory middleware.
 
-## Adapters
+## Frameworks
 
-Routed ships adapters for four frameworks. The route tree is framework-agnostic — adapters translate it into framework-specific registration.
+Set `framework` in your config and `routed generate` produces a native, typed app for that framework. Your route files stay the same — only the generated output changes.
 
 ### Hono
 
 ```ts
-import { createHonoApp } from "routedjs/hono";
-const app = createHonoApp(routeTree);
+// routed.config.ts
+framework: "hono"
+
+// server.ts
+import { app } from "./routed.gen";
 export default { fetch: app.fetch, port: 3000 };
-```
-
-### Koa
-
-```ts
-import { createKoaApp } from "routedjs/koa";
-const app = createKoaApp(routeTree);
-app.listen(3000);
 ```
 
 ### Express
 
 ```ts
-import { createExpressApp } from "routedjs/express";
-const app = createExpressApp(routeTree);
+// routed.config.ts
+framework: "express"
+
+// server.ts
+import { app } from "./routed.gen";
+app.listen(3000);
+```
+
+### Koa
+
+```ts
+// routed.config.ts
+framework: "koa"
+
+// server.ts
+import { app } from "./routed.gen";
 app.listen(3000);
 ```
 
 ### Elysia
 
 ```ts
-import { createElysiaApp } from "routedjs/elysia";
-const app = createElysiaApp(routeTree);
+// routed.config.ts
+framework: "elysia"
+
+// server.ts
+import { app } from "./routed.gen";
 app.listen(3000);
 ```
+
+### Without `framework` (generic route tree)
+
+If you omit `framework`, the generated file exports a framework-agnostic `routeTree` that you wire into any framework at runtime:
+
+```ts
+import { createHonoApp } from "routedjs/hono";
+import { routeTree } from "./routed.gen";
+const app = createHonoApp(routeTree);
+```
+
+This still works but produces an untyped app — use `framework` for full type inference.
 
 ## Type-safe client
 
@@ -351,13 +373,14 @@ Types are inferred from your schemas at compile time. At runtime, the client is 
 
 ## Response validation
 
-Adapters can optionally validate handler return values against your `responses` schemas. Off by default — enable it to catch handler bugs during development:
+Adapters can optionally validate handler return values against your `responses` schemas. Off by default — enable it to catch handler bugs during development. Pass `validateResponses` when using the runtime API:
 
 ```ts
+import { createHonoApp } from "routedjs/hono";
 const app = createHonoApp(routeTree, { validateResponses: true });
 ```
 
-When enabled, routedjs validates plain-object returns against the schema matching the buffered response status. Available on all four adapters.
+When enabled, routedjs validates plain-object returns against the schema matching the buffered response status. Available on all four frameworks.
 
 ## OpenAPI
 
@@ -447,7 +470,7 @@ Generates an OpenAPI spec from your routes. Requires `openapi` in your config.
 
 ## Benchmarks
 
-All four adapters benchmarked over real HTTP on Apple M2 Max (bun 1.3.10):
+All four frameworks benchmarked over real HTTP on Apple M2 Max (bun 1.3.10):
 
 **Request throughput (avg µs/req, lower is better)**:
 

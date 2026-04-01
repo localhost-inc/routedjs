@@ -311,19 +311,19 @@ type FrameworkCodegen = (input: FrameworkCodegenInput) => string | Promise<strin
 async function resolveFrameworkCodegen(framework: string): Promise<FrameworkCodegen> {
   switch (framework) {
     case "hono": {
-      const mod = await import("../adapters/hono.ts");
+      const mod = await import("../frameworks/hono.ts");
       return mod.generateTypedApp as FrameworkCodegen;
     }
     case "express": {
-      const mod = await import("../adapters/express.ts");
+      const mod = await import("../frameworks/express.ts");
       return mod.generateTypedApp as FrameworkCodegen;
     }
     case "koa": {
-      const mod = await import("../adapters/koa.ts");
+      const mod = await import("../frameworks/koa.ts");
       return mod.generateTypedApp as FrameworkCodegen;
     }
     case "elysia": {
-      const mod = await import("../adapters/elysia.ts");
+      const mod = await import("../frameworks/elysia.ts");
       return mod.generateTypedApp as FrameworkCodegen;
     }
     default:

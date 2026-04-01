@@ -3,7 +3,7 @@ import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { validateSchema } from "./validate.ts";
 import { createRoute } from "./create-route.ts";
 import { defineRouteTree } from "./define-route-tree.ts";
-import { createHonoApp } from "../adapters/hono.ts";
+import { createHonoApp } from "../frameworks/hono.ts";
 
 // ---------------------------------------------------------------------------
 // Custom schema that implements StandardSchemaV1 (no Zod)
