@@ -87,6 +87,10 @@ export abstract class BaseRouteContext implements RouteContext {
     return this._state.get(key);
   }
 
+  protected hasState(key: string): boolean {
+    return this._state?.has(key) ?? false;
+  }
+
   /**
    * Convert a handler result into a Response while preserving buffered status and headers.
    */

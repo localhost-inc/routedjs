@@ -35,6 +35,24 @@ class HonoRouteContext extends BaseRouteContext {
     this.path = c.req.path;
     this.raw = c;
   }
+
+  override set(key: string, value: unknown): void {
+    super.set(key, value);
+    this.raw.set(key as never, value as never);
+  }
+
+  override get(key: string): unknown {
+    if (this.hasState(key)) {
+      return super.get(key);
+    }
+
+    const value = this.raw.get(key as never);
+    if (value !== undefined) {
+      return value;
+    }
+
+    throw new Error(`Context key "${key}" has not been set`);
+  }
 }
 
 // ---------------------------------------------------------------------------

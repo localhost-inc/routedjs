@@ -201,6 +201,52 @@ export default createRoute({
 
 If you need full control, return a raw `Response`. Status, headers, binary bodies, redirects, and streaming responses pass through unchanged.
 
+## App context typing
+
+If your app seeds always-present values like `db`, `cache`, or `logger` at the
+app level, you can register that context once and get typed `ctx.get(...)`
+access in handlers and middleware without repeating a bridge middleware on every
+route.
+
+```ts
+// app/routed.d.ts
+import "routedjs";
+
+declare module "routedjs" {
+  interface Register {
+    appContext: {
+      db: {
+        query: (sql: string) => Promise<unknown>;
+      };
+      cache: {
+        get: (key: string) => Promise<string | null>;
+      };
+    };
+  }
+}
+```
+
+Then your routes can read that context directly:
+
+```ts
+import { createRoute } from "routedjs";
+
+export default createRoute({
+  handler: async ({ ctx }) => {
+    const cached = await ctx.get("cache").get("health");
+    if (cached) return { status: cached };
+
+    await ctx.get("db").query("select 1");
+    return { status: "ok" };
+  },
+});
+```
+
+On Hono, routed automatically bridges app-level `c.set(...)` / `c.get(...)`
+values into routed `ctx.get(...)`, and mirrors routed `ctx.set(...)` back to
+the underlying Hono context. Other adapters can provide equivalent runtime
+state through global or directory middleware.
+
 ## Adapters
 
 Routed ships adapters for four frameworks. The route tree is framework-agnostic — adapters translate it into framework-specific registration.

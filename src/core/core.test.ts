@@ -8,6 +8,19 @@ import { z } from "zod";
 import type { RouteContext } from "./context.ts";
 import type { RouteTree } from "./types.ts";
 
+declare module "../index.ts" {
+  interface Register {
+    appContext: {
+      db: {
+        query: () => string;
+      };
+      cache: {
+        get: (key: string) => Promise<string | null>;
+      };
+    };
+  }
+}
+
 /** Minimal RouteContext for testing. */
 class TestRouteContext extends BaseRouteContext {
   readonly request: Request;
@@ -248,6 +261,46 @@ describe("context state", () => {
     });
 
     expect(ctx.get("user")).toEqual({ id: "1", name: "Kyle" });
+  });
+
+  test("declared app context flows to middleware and handler types", () => {
+    const auth = createMiddleware<{ userId: string }>(async ({ ctx, next }) => {
+      const db = ctx.get("db");
+      const cache = ctx.get("cache");
+
+      const result: string = db.query();
+      void cache.get(result);
+
+      ctx.set("userId", result);
+      await next();
+    });
+
+    const route = createRoute({
+      middleware: [auth],
+      handler: ({ ctx }) => {
+        const db = ctx.get("db");
+        const userId = ctx.get("userId");
+
+        const result: string = db.query();
+        const authenticatedUserId: string = userId;
+
+        return { result, authenticatedUserId };
+      },
+    });
+
+    expect(route.middleware).toHaveLength(1);
+  });
+
+  test("declared app context is available without per-route middleware", () => {
+    const route = createRoute({
+      handler: ({ ctx }) => {
+        const db = ctx.get("db");
+        const result: string = db.query();
+        return { result };
+      },
+    });
+
+    expect(route.middleware).toHaveLength(0);
   });
 });
 

@@ -1,3 +1,5 @@
+export interface Register {}
+
 export { createRoute } from "./core/create-route.ts";
 export { createMiddleware } from "./core/create-middleware.ts";
 export { defineRouteTree } from "./core/define-route-tree.ts";
@@ -8,6 +10,7 @@ export { validateSchema, type ValidationResult } from "./core/validate.ts";
 export type { RouteContext } from "./core/context.ts";
 
 export type {
+  RegisteredAppContext,
   HttpMethod,
   ResponseSchemaMap,
   ResponseStatus,

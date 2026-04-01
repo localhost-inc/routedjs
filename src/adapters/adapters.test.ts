@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { createRoute } from "../core/create-route.ts";
 import { createMiddleware } from "../core/create-middleware.ts";
@@ -820,6 +821,73 @@ describe("Hono adapter", () => {
   });
 
   adapterTests("Hono", () => ctx);
+
+  test("reads app-level Hono context through routed ctx.get without bridge middleware", async () => {
+    const routed = createHonoApp([
+      {
+        path: "/app-context",
+        method: "get",
+        route: createRoute({
+          handler: async ({ ctx }) => ({
+            db: ctx.get("db"),
+            requestId: ctx.get("requestId"),
+          }),
+        }),
+        middleware: [],
+      },
+    ]);
+
+    const app = new Hono<{
+      Variables: {
+        db: string;
+        requestId: string;
+      };
+    }>();
+    app.use("*", async (c, next) => {
+      c.set("db", "main-db");
+      c.set("requestId", "req-123");
+      await next();
+    });
+    app.route("/", routed);
+
+    const res = await app.fetch(new Request("http://localhost/app-context"));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      db: "main-db",
+      requestId: "req-123",
+    });
+  });
+
+  test("mirrors routed ctx.set back onto the underlying Hono context", async () => {
+    const app = createHonoApp([
+      {
+        path: "/mirrored-state",
+        method: "get",
+        route: createRoute({
+          middleware: [
+            createMiddleware<{ user: string }>(async ({ ctx, next }) => {
+              ctx.set("user", "user-1");
+              await next();
+            }),
+          ],
+          handler: async ({ ctx }) => ({
+            routed: ctx.get("user"),
+            raw: (ctx.raw as Context).get("user"),
+          }),
+        }),
+        middleware: [],
+      },
+    ]);
+
+    const res = await app.fetch(new Request("http://localhost/mirrored-state"));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      routed: "user-1",
+      raw: "user-1",
+    });
+  });
 
   describe("response validation", () => {
     const rvCtx = { withValidation: null! as MakeRequest, withoutValidation: null! as MakeRequest };

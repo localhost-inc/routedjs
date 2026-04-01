@@ -1,5 +1,8 @@
+import type { Register } from "../index.ts";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { RouteContext } from "./context.ts";
+
+type EmptyState = Record<never, never>;
 
 // ---------------------------------------------------------------------------
 // HTTP methods
@@ -31,17 +34,37 @@ export type ResponseStatus = number | `${number}`;
 
 export type ResponseSchemaMap = Partial<Record<ResponseStatus, StandardSchemaV1>>;
 
+export type RegisteredAppContext =
+  Register extends { appContext: infer T extends Record<string, unknown> }
+    ? T
+    : EmptyState;
+
 // ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------
 
-export type MiddlewareFn<TState extends Record<string, unknown> = Record<string, unknown>> = (input: {
-  ctx: RouteContext & { set<K extends string & keyof TState>(key: K, value: TState[K]): void };
+type AvailableState<TState extends Record<string, unknown>> =
+  RegisteredAppContext & TState;
+
+type MaybeTypedRouteContext<TState extends Record<string, unknown>> =
+  [keyof TState] extends [never] ? RouteContext : TypedRouteContext<TState>;
+
+type MiddlewareContext<TState extends Record<string, unknown>> =
+  MaybeTypedRouteContext<RegisteredAppContext> & {
+    set<K extends string & keyof TState>(key: K, value: TState[K]): void;
+  };
+
+export type MiddlewareFn<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+> = (input: {
+  ctx: MiddlewareContext<TState>;
   next: () => Promise<unknown>;
 }) => unknown | Promise<unknown>;
 
 /** Phantom type `_state` carries the state shape for inference. Never set at runtime. */
-export type MiddlewareDefinition<TState extends Record<string, unknown> = Record<string, never>> = {
+export type MiddlewareDefinition<
+  TState extends Record<string, unknown> = EmptyState,
+> = {
   __brand: "routed:middleware";
   handler: MiddlewareFn<Record<string, unknown>>;
   /** @internal Phantom — do not access. */
@@ -52,7 +75,7 @@ export type MiddlewareDefinition<TState extends Record<string, unknown> = Record
 // State inference helpers
 // ---------------------------------------------------------------------------
 
-type ExtractState<T> = T extends MiddlewareDefinition<infer S> ? S : Record<string, never>;
+type ExtractState<T> = T extends MiddlewareDefinition<infer S> ? S : EmptyState;
 
 type UnionToIntersection<U> = (
   U extends unknown ? (x: U) => void : never
@@ -62,7 +85,7 @@ type UnionToIntersection<U> = (
 
 export type MergeMiddlewareState<T extends readonly unknown[]> = UnionToIntersection<
   ExtractState<T[number]>
-> extends infer R extends Record<string, unknown> ? R : Record<string, never>;
+> extends infer R extends Record<string, unknown> ? R : EmptyState;
 
 // ---------------------------------------------------------------------------
 // Typed context — RouteContext with typed get() from middleware state
@@ -90,12 +113,12 @@ type InferResponsesOutput<T extends ResponseSchemaMap | undefined> = T extends R
 
 export type HandlerInput<
   TSchemas extends RouteSchemas,
-  TState extends Record<string, unknown> = Record<string, never>,
+  TState extends Record<string, unknown> = EmptyState,
 > = {
   params: InferOptional<TSchemas["params"]>;
   query: InferOptional<TSchemas["query"]>;
   body: InferOptional<TSchemas["body"]>;
-  ctx: [keyof TState] extends [never] ? RouteContext : TypedRouteContext<TState>;
+  ctx: MaybeTypedRouteContext<AvailableState<TState>>;
 };
 
 type HandlerReturn<TSchemas extends RouteSchemas> =
@@ -107,7 +130,7 @@ type HandlerReturn<TSchemas extends RouteSchemas> =
 
 export type HandlerFn<
   TSchemas extends RouteSchemas,
-  TState extends Record<string, unknown> = Record<string, never>,
+  TState extends Record<string, unknown> = EmptyState,
 > = (
   input: HandlerInput<TSchemas, TState>,
 ) => HandlerReturn<TSchemas> | Promise<HandlerReturn<TSchemas>>;
