@@ -6,7 +6,7 @@ import { BaseRouteContext } from "./context.ts";
 import { RouteError } from "./error.ts";
 import { z } from "zod";
 import type { RouteContext } from "./context.ts";
-import type { RouteTree } from "./types.ts";
+import type { RouteTree, TypedRouteContext } from "./types.ts";
 
 declare module "../index.ts" {
   interface Register {
@@ -301,6 +301,21 @@ describe("context state", () => {
     });
 
     expect(route.middleware).toHaveLength(0);
+  });
+
+  test("TypedRouteContext includes declared app context", () => {
+    const readContext = (ctx: TypedRouteContext<{ userId: string }>) => {
+      const db = ctx.get("db");
+      const cache = ctx.get("cache");
+      const userId = ctx.get("userId");
+
+      const result: string = db.query();
+      void cache.get(result);
+
+      return { result, userId };
+    };
+
+    expect(typeof readContext).toBe("function");
   });
 });
 

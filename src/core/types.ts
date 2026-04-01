@@ -47,10 +47,12 @@ type AvailableState<TState extends Record<string, unknown>> =
   RegisteredAppContext & TState;
 
 type MaybeTypedRouteContext<TState extends Record<string, unknown>> =
-  [keyof TState] extends [never] ? RouteContext : TypedRouteContext<TState>;
+  [keyof AvailableState<TState>] extends [never]
+    ? RouteContext
+    : TypedRouteContext<TState>;
 
 type MiddlewareContext<TState extends Record<string, unknown>> =
-  MaybeTypedRouteContext<RegisteredAppContext> & {
+  MaybeTypedRouteContext<EmptyState> & {
     set<K extends string & keyof TState>(key: K, value: TState[K]): void;
   };
 
@@ -91,9 +93,13 @@ export type MergeMiddlewareState<T extends readonly unknown[]> = UnionToIntersec
 // Typed context — RouteContext with typed get() from middleware state
 // ---------------------------------------------------------------------------
 
-export type TypedRouteContext<TState extends Record<string, unknown>> =
+export type TypedRouteContext<
+  TState extends Record<string, unknown> = EmptyState,
+> =
   Omit<RouteContext, "get"> & {
-    get<K extends string & keyof TState>(key: K): TState[K];
+    get<K extends string & keyof AvailableState<TState>>(
+      key: K,
+    ): AvailableState<TState>[K];
     get(key: string): unknown;
   };
 
@@ -118,7 +124,7 @@ export type HandlerInput<
   params: InferOptional<TSchemas["params"]>;
   query: InferOptional<TSchemas["query"]>;
   body: InferOptional<TSchemas["body"]>;
-  ctx: MaybeTypedRouteContext<AvailableState<TState>>;
+  ctx: MaybeTypedRouteContext<TState>;
 };
 
 type HandlerReturn<TSchemas extends RouteSchemas> =
