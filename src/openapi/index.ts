@@ -78,6 +78,8 @@ function buildOperation(entry: RouteEntry): Record<string, unknown> {
 
   if (schemas.params) {
     parameters.push(...extractPathParams(schemas.params, path));
+  } else {
+    parameters.push(...inferPathParams(path));
   }
 
   if (schemas.query) {
@@ -189,6 +191,22 @@ function toOpenAPIPathParamSchema(schema: unknown): Record<string, unknown> {
       ? { description: `${existingDescription} ${description}` }
       : { description }),
   };
+}
+
+function inferPathParams(path: string): unknown[] {
+  const paramNames = extractParamNames(path);
+  if (paramNames.length === 0) return [];
+
+  const splatNames = new Set(extractSplatParamNames(path));
+
+  return paramNames.map((name) => ({
+    name,
+    in: "path",
+    required: true,
+    schema: splatNames.has(name)
+      ? toOpenAPIPathParamSchema(undefined)
+      : { type: "string" },
+  }));
 }
 
 function extractQueryParams(querySchema: StandardSchemaV1): unknown[] {
