@@ -35,7 +35,7 @@ export type ResponseStatus = number | `${number}`;
 export type ResponseSchemaMap = Partial<Record<ResponseStatus, StandardSchemaV1>>;
 
 export type RegisteredAppContext =
-  Register extends { appContext: infer T extends Record<string, unknown> }
+  (Register & RoutedJS.Register) extends { appContext: infer T extends Record<string, unknown> }
     ? T
     : EmptyState;
 
@@ -146,6 +146,8 @@ type InferOptional<T extends StandardSchemaV1 | undefined> = T extends StandardS
   : undefined;
 
 export type InferSchemaOutput<T> = T extends StandardSchemaV1 ? StandardSchemaV1.InferOutput<T> : never;
+
+export type InferSchemaInput<T> = T extends StandardSchemaV1 ? StandardSchemaV1.InferInput<T> : never;
 
 export type InferResponsesOutput<T extends ResponseSchemaMap | undefined> = T extends ResponseSchemaMap
   ? InferSchemaOutput<T[keyof T]>

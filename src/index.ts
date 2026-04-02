@@ -1,4 +1,10 @@
-export interface Register {}
+declare global {
+  namespace RoutedJS {
+    interface Register {}
+  }
+}
+
+export interface Register extends RoutedJS.Register {}
 
 export { createRoute } from "./core/create-route.ts";
 export { createMiddleware } from "./core/create-middleware.ts";

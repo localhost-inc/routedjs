@@ -15,6 +15,7 @@ import { getResponseSchemaForStatus } from "../core/responses.ts";
 import { validateSchema } from "../core/validate.ts";
 import { generateManifestSource } from "../codegen/manifest.ts";
 import type {
+  InferSchemaInput,
   InferSchemaOutput,
   MiddlewareDefinition,
   RouteDefinition,
@@ -104,10 +105,10 @@ type NormalizeStatusCode<T extends string | number> = T extends number
 
 type HonoInputShape<TSchemas extends RouteSchemas> =
   (TSchemas extends { body: infer TBody extends StandardSchemaV1 }
-    ? { json: InferSchemaOutput<TBody> }
+    ? { json: InferSchemaInput<TBody> }
     : {}) &
   (TSchemas extends { query: infer TQuery extends StandardSchemaV1 }
-    ? { query: InferSchemaOutput<TQuery> }
+    ? { query: InferSchemaInput<TQuery> }
     : {});
 
 type HonoRouteInput<TSchemas extends RouteSchemas> =
