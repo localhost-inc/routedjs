@@ -309,7 +309,7 @@ function extractDefinitions(
   jsonSchema: Record<string, unknown>,
   componentSchemas: Record<string, unknown>,
 ): Record<string, unknown> {
-  const { definitions, ...rest } = jsonSchema;
+  const { definitions, id, ...rest } = jsonSchema;
 
   if (definitions && typeof definitions === "object") {
     const defs = definitions as Record<string, unknown>;
@@ -318,6 +318,13 @@ function extractDefinitions(
       delete cleaned.id;
       componentSchemas[name] = rewriteRefs(cleaned);
     }
+  }
+
+  // When the root schema itself has an id, hoist it into components/schemas
+  // and return a $ref pointer instead of the inline schema.
+  if (typeof id === "string") {
+    componentSchemas[id] = rewriteRefs(rest);
+    return { $ref: `#/components/schemas/${id}` };
   }
 
   return rewriteRefs(rest) as Record<string, unknown>;
