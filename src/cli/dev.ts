@@ -21,7 +21,7 @@ function needsRegen(filePath: string): boolean {
 }
 
 export async function dev(config: RoutedConfig, cwd: string) {
-  const { routesDir, outFile } = config;
+  const { routesDir, outFile, framework } = config;
   const devCommand = config.dev!.command;
   const clientOutFile = config.client?.outFile
     ? path.resolve(cwd, config.client.outFile)
@@ -35,7 +35,7 @@ export async function dev(config: RoutedConfig, cwd: string) {
 
   // Initial generation
   console.log(`routed: scanning ${path.relative(cwd, routesDir)}`);
-  const initial = await generate({ routesDir, outFile, clientOutFile });
+  const initial = await generate({ routesDir, outFile, clientOutFile, framework });
   console.log(
     `routed: generated ${path.relative(cwd, outFile)} (${initial.routeCount} routes, ${initial.middlewareCount} middleware)`,
   );
@@ -68,7 +68,7 @@ export async function dev(config: RoutedConfig, cwd: string) {
     debounceTimer = setTimeout(async () => {
       if (pendingRegen) {
         console.log(`routed: regenerating...`);
-        const result = await generate({ routesDir, outFile, clientOutFile });
+        const result = await generate({ routesDir, outFile, clientOutFile, framework });
         console.log(
           `routed: generated (${result.routeCount} routes, ${result.middlewareCount} middleware)`,
         );
