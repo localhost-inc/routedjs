@@ -31,6 +31,7 @@ type OpenAPISpec = {
   info: OpenAPIInfo;
   servers?: OpenAPIServer[];
   paths: Record<string, Record<string, unknown>>;
+  components?: { schemas: Record<string, unknown> };
 };
 
 export function generateOpenAPISpec(
@@ -38,6 +39,7 @@ export function generateOpenAPISpec(
   config: OpenAPIConfig,
 ): OpenAPISpec {
   const paths: Record<string, Record<string, unknown>> = {};
+  const componentSchemas: Record<string, unknown> = {};
 
   for (const entry of routeTree) {
     const openApiPath = toOpenAPIPath(entry.path);
@@ -46,22 +48,31 @@ export function generateOpenAPISpec(
       paths[openApiPath] = {};
     }
 
-    paths[openApiPath]![entry.method] = buildOperation(entry);
+    paths[openApiPath]![entry.method] = buildOperation(entry, componentSchemas);
   }
 
-  return {
+  const spec: OpenAPISpec = {
     openapi: "3.1.0",
     info: config.info,
     ...(config.servers ? { servers: config.servers } : {}),
     paths,
   };
+
+  if (Object.keys(componentSchemas).length > 0) {
+    spec.components = { schemas: componentSchemas };
+  }
+
+  return spec;
 }
 
 // ---------------------------------------------------------------------------
 // Operation builder
 // ---------------------------------------------------------------------------
 
-function buildOperation(entry: RouteEntry): Record<string, unknown> {
+function buildOperation(
+  entry: RouteEntry,
+  componentSchemas: Record<string, unknown>,
+): Record<string, unknown> {
   const { route, path, method } = entry;
   const { schemas, meta } = route;
   const operation: Record<string, unknown> = {};
@@ -77,13 +88,13 @@ function buildOperation(entry: RouteEntry): Record<string, unknown> {
   const parameters: unknown[] = [];
 
   if (schemas.params) {
-    parameters.push(...extractPathParams(schemas.params, path));
+    parameters.push(...extractPathParams(schemas.params, path, componentSchemas));
   } else {
     parameters.push(...inferPathParams(path));
   }
 
   if (schemas.query) {
-    parameters.push(...extractQueryParams(schemas.query));
+    parameters.push(...extractQueryParams(schemas.query, componentSchemas));
   }
 
   if (parameters.length > 0) {
@@ -92,7 +103,7 @@ function buildOperation(entry: RouteEntry): Record<string, unknown> {
 
   // Request body
   if (schemas.body) {
-    const bodySchema = schemaToJsonSchema(schemas.body);
+    const bodySchema = schemaToJsonSchema(schemas.body, componentSchemas);
     if (bodySchema) {
       operation.requestBody = {
         required: true,
@@ -113,7 +124,7 @@ function buildOperation(entry: RouteEntry): Record<string, unknown> {
       Array.from(responseSchemas.entries())
         .sort(([leftStatus], [rightStatus]) => leftStatus - rightStatus)
         .map(([status, schema]) => {
-          const responseSchema = schemaToJsonSchema(schema);
+          const responseSchema = schemaToJsonSchema(schema, componentSchemas);
 
           return [
             String(status),
@@ -150,8 +161,9 @@ function buildOperation(entry: RouteEntry): Record<string, unknown> {
 function extractPathParams(
   paramsSchema: StandardSchemaV1,
   path: string,
+  componentSchemas: Record<string, unknown>,
 ): unknown[] {
-  const jsonSchema = schemaToJsonSchema(paramsSchema);
+  const jsonSchema = schemaToJsonSchema(paramsSchema, componentSchemas);
   if (!jsonSchema) return [];
 
   const properties = (jsonSchema as Record<string, unknown>).properties as
@@ -209,8 +221,11 @@ function inferPathParams(path: string): unknown[] {
   }));
 }
 
-function extractQueryParams(querySchema: StandardSchemaV1): unknown[] {
-  const jsonSchema = schemaToJsonSchema(querySchema);
+function extractQueryParams(
+  querySchema: StandardSchemaV1,
+  componentSchemas: Record<string, unknown>,
+): unknown[] {
+  const jsonSchema = schemaToJsonSchema(querySchema, componentSchemas);
   if (!jsonSchema) return [];
 
   const properties = (jsonSchema as Record<string, unknown>).properties as
@@ -230,13 +245,21 @@ function extractQueryParams(querySchema: StandardSchemaV1): unknown[] {
 }
 
 // ---------------------------------------------------------------------------
-// Schema conversion — Standard JSON Schema with zod-to-json-schema fallback
+// Schema conversion
 // ---------------------------------------------------------------------------
 
-function schemaToJsonSchema(schema: StandardSchemaV1): unknown | null {
+/**
+ * Convert a StandardSchemaV1 to JSON Schema, collecting any named definitions
+ * into `componentSchemas` for hoisting into `components/schemas`.
+ */
+function schemaToJsonSchema(
+  schema: StandardSchemaV1,
+  componentSchemas: Record<string, unknown>,
+): unknown | null {
   const std = schema["~standard"] as unknown as Record<string, unknown>;
 
-  // 1. Try StandardJSONSchemaV1 (library-native JSON Schema conversion)
+  // 1. StandardJSONSchemaV1 — the generalized Standard Schema path.
+  //    Libraries like Zod 4 expose .meta({ id }) → definitions/$ref here.
   if (
     "jsonSchema" in std &&
     std.jsonSchema &&
@@ -245,15 +268,17 @@ function schemaToJsonSchema(schema: StandardSchemaV1): unknown | null {
     typeof (std.jsonSchema as Record<string, unknown>).output === "function"
   ) {
     try {
-      return (std.jsonSchema as { output: (opts: { target: string }) => unknown }).output({
+      const result = (std.jsonSchema as { output: (opts: { target: string }) => unknown }).output({
         target: "openapi-3.0",
-      });
+      }) as Record<string, unknown>;
+
+      return extractDefinitions(result, componentSchemas);
     } catch {
       // Fall through to next strategy
     }
   }
 
-  // 2. Fallback: zod-to-json-schema for Zod schemas
+  // 2. Fallback: zod-to-json-schema for Zod 3
   if (std.vendor === "zod") {
     try {
       const { zodToJsonSchema } = require("zod-to-json-schema") as {
@@ -269,6 +294,57 @@ function schemaToJsonSchema(schema: StandardSchemaV1): unknown | null {
 
   // 3. No conversion available
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Definition extraction — hoists named schemas into components/schemas
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract `definitions` from a JSON Schema result, move them into
+ * `componentSchemas`, and rewrite `$ref` pointers from
+ * `#/definitions/X` → `#/components/schemas/X`.
+ */
+function extractDefinitions(
+  jsonSchema: Record<string, unknown>,
+  componentSchemas: Record<string, unknown>,
+): Record<string, unknown> {
+  const { definitions, ...rest } = jsonSchema;
+
+  if (definitions && typeof definitions === "object") {
+    const defs = definitions as Record<string, unknown>;
+    for (const [name, defSchema] of Object.entries(defs)) {
+      const cleaned = { ...(defSchema as Record<string, unknown>) };
+      delete cleaned.id;
+      componentSchemas[name] = rewriteRefs(cleaned);
+    }
+  }
+
+  return rewriteRefs(rest) as Record<string, unknown>;
+}
+
+/**
+ * Recursively rewrite `$ref: "#/definitions/X"` → `$ref: "#/components/schemas/X"`.
+ */
+function rewriteRefs(value: unknown): unknown {
+  if (value === null || typeof value !== "object") return value;
+
+  if (Array.isArray(value)) {
+    return value.map(rewriteRefs);
+  }
+
+  const obj = value as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+
+  for (const [key, val] of Object.entries(obj)) {
+    if (key === "$ref" && typeof val === "string" && val.startsWith("#/definitions/")) {
+      result[key] = val.replace("#/definitions/", "#/components/schemas/");
+    } else {
+      result[key] = rewriteRefs(val);
+    }
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
