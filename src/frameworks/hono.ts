@@ -1,5 +1,9 @@
 import { Hono } from "hono";
-import type { Context, TypedResponse, Input as HonoInput } from "hono";
+import type {
+  Context,
+  MiddlewareHandler as HonoMiddlewareHandler,
+  TypedResponse,
+} from "hono";
 import { createMiddleware as createHonoMiddleware } from "hono/factory";
 import type { StatusCode } from "hono/utils/http-status";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
@@ -17,7 +21,9 @@ import { generateManifestSource } from "../codegen/manifest.ts";
 import type {
   InferSchemaInput,
   InferSchemaOutput,
+  InferResponsesOutput,
   MiddlewareDefinition,
+  ResponseSchemaMap,
   RouteDefinition,
   RouteEntry,
   RouteSchemas,
@@ -116,38 +122,29 @@ type HonoRouteInput<TSchemas extends RouteSchemas> =
     ? {}
     : { in: HonoInputShape<TSchemas> };
 
-type HonoResponseFromResponses<TSchemas extends RouteSchemas> =
-  TSchemas["responses"] extends infer TResponses extends Record<string | number, unknown>
-    ? {
-        [TStatus in keyof TResponses]:
-          TResponses[TStatus] extends infer TSchema
-            ? TypedResponse<
-                InferSchemaOutput<TSchema>,
-                NormalizeStatusCode<Extract<TStatus, string | number>> & StatusCode,
-                "json"
-              >
-            : never;
-      }[keyof TResponses]
+type HonoResponseDataFromResponses<TSchemas extends RouteSchemas> =
+  TSchemas extends { responses: infer TResponses extends ResponseSchemaMap }
+    ? InferResponsesOutput<TResponses>
     : never;
 
-type HonoResponseFromSchema<TSchemas extends RouteSchemas> =
-  TSchemas["response"] extends undefined
-    ? never
-    : TypedResponse<InferSchemaOutput<TSchemas["response"]>, 200, "json">;
+type HonoResponseDataFromSchema<TSchemas extends RouteSchemas> =
+  TSchemas extends { response: infer TResponse extends StandardSchemaV1 }
+    ? InferSchemaOutput<TResponse>
+    : never;
 
-type HonoResponseFromHandler<TRoute extends RouteDefinition<any, any>> =
-  [RouteHandlerOutput<TRoute>] extends [never]
-    ? TypedResponse
-    : TypedResponse<RouteHandlerOutput<TRoute>, 200, "json">;
+type HonoResponseData<TRoute extends RouteDefinition<any, any>> =
+  TRoute["schemas"] extends infer TSchemas extends RouteSchemas
+    ? [HonoResponseDataFromResponses<TSchemas>] extends [never]
+      ? [HonoResponseDataFromSchema<TSchemas>] extends [never]
+        ? RouteHandlerOutput<TRoute>
+        : HonoResponseDataFromSchema<TSchemas>
+      : HonoResponseDataFromResponses<TSchemas>
+    : RouteHandlerOutput<TRoute>;
 
 type HonoRouteResponse<TRoute extends RouteDefinition<any, any>> =
-  TRoute["schemas"] extends infer TSchemas extends RouteSchemas
-    ? [HonoResponseFromResponses<TSchemas>] extends [never]
-      ? [HonoResponseFromSchema<TSchemas>] extends [never]
-        ? HonoResponseFromHandler<TRoute>
-        : HonoResponseFromSchema<TSchemas>
-      : HonoResponseFromResponses<TSchemas>
-    : TypedResponse;
+  [HonoResponseData<TRoute>] extends [never]
+    ? TypedResponse
+    : TypedResponse<HonoResponseData<TRoute>, StatusCode, "json">;
 
 /**
  * Create a Hono app from a routed route tree.
@@ -357,7 +354,9 @@ export function routeHandler<
 ): (c: Context<any, TPath, HonoRouteInput<TRoute["schemas"]>>) => Promise<HonoRouteResponse<TRoute>> {
   const validateResponses = options?.validateResponses ?? false;
 
-  return async (c: Context) => {
+  const handler = async (
+    c: Context<any, TPath, HonoRouteInput<TRoute["schemas"]>>,
+  ): Promise<HonoRouteResponse<TRoute>> => {
     const ctx = new HonoRouteContext(c);
 
     // Run route-level middleware
@@ -402,17 +401,21 @@ export function routeHandler<
       throw err;
     }
   };
+
+  return handler;
 }
 
 /**
  * Wrap a routedjs middleware definition as a Hono middleware handler.
  * Used by the generated typed app to preserve Hono's type chain.
  */
-export function wrapMiddleware(mw: MiddlewareDefinition<any, any>) {
+export function wrapMiddleware(
+  mw: MiddlewareDefinition<any, any>,
+): HonoMiddlewareHandler<any, any> {
   return createHonoMiddleware(async (c, next) => {
     const ctx = new HonoRouteContext(c);
     await mw.handler({ ctx, next });
-  });
+  }) as HonoMiddlewareHandler<any, any>;
 }
 
 /** @internal Adapter-owned app codegen hook used by the CLI. */

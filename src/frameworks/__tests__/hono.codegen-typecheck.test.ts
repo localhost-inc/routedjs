@@ -64,12 +64,38 @@ describe("generated Hono app client inference", () => {
 
     await writeRoute(
       routesDir,
+      "_middleware.ts",
+      [
+        'import { createMiddleware } from "routedjs";',
+        "",
+        "export default createMiddleware(async ({ next }) => {",
+        "  await next();",
+        "});",
+        "",
+      ].join("\n"),
+    );
+
+    await writeRoute(
+      routesDir,
       "health.get.route.ts",
       [
         'import { createRoute } from "routedjs";',
         "",
         "export default createRoute({",
         "  handler: async () => ({ ok: true as const }),",
+        "});",
+        "",
+      ].join("\n"),
+    );
+
+    await writeRoute(
+      routesDir,
+      "users/_middleware.ts",
+      [
+        'import { createMiddleware } from "routedjs";',
+        "",
+        "export default createMiddleware(async ({ next }) => {",
+        "  await next();",
         "});",
         "",
       ].join("\n"),
@@ -146,18 +172,27 @@ describe("generated Hono app client inference", () => {
         "  const healthRes = await client.health.$get();",
         "  const health = await healthRes.json();",
         "  const healthOk: { ok: true } = health;",
+        "  // @ts-expect-error response body must not widen to `never` or `unknown`",
+        "  const healthWrong: { wrong: number } = health;",
         "",
         "  const listUsersRes = await client.users.$get(listUsersRequest);",
         "  const listUsers = await listUsersRes.json();",
         "  const listUsersShape: { users: never[]; limit?: number | undefined } = listUsers;",
+        "  // @ts-expect-error response body must preserve the generated query route shape",
+        "  const listUsersWrong: { wrong: number } = listUsers;",
         "",
         "  const createUserRes = await client.users.$post(createUserRequest);",
         "  const createdUser = await createUserRes.json();",
         "  const createdUserShape: { id: string; name: string; email: string } = createdUser;",
+        "  // @ts-expect-error response body must preserve the generated body route shape",
+        "  const createdUserWrong: { wrong: number } = createdUser;",
         "",
         "  void healthOk;",
+        "  void healthWrong;",
         "  void listUsersShape;",
+        "  void listUsersWrong;",
         "  void createdUserShape;",
+        "  void createdUserWrong;",
         "}",
         "",
         "void client;",
