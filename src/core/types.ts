@@ -145,9 +145,9 @@ type InferOptional<T extends StandardSchemaV1 | undefined> = T extends StandardS
   ? StandardSchemaV1.InferOutput<T>
   : undefined;
 
-type InferSchemaOutput<T> = T extends StandardSchemaV1 ? StandardSchemaV1.InferOutput<T> : never;
+export type InferSchemaOutput<T> = T extends StandardSchemaV1 ? StandardSchemaV1.InferOutput<T> : never;
 
-type InferResponsesOutput<T extends ResponseSchemaMap | undefined> = T extends ResponseSchemaMap
+export type InferResponsesOutput<T extends ResponseSchemaMap | undefined> = T extends ResponseSchemaMap
   ? InferSchemaOutput<T[keyof T]>
   : never;
 
@@ -161,12 +161,12 @@ export type HandlerInput<
   ctx: MaybeTypedRouteContext<TState>;
 };
 
-type HandlerReturn<TSchemas extends RouteSchemas> =
+export type HandlerReturn<TSchemas extends RouteSchemas> =
   TSchemas["responses"] extends ResponseSchemaMap
     ? InferResponsesOutput<TSchemas["responses"]> | Response
     : TSchemas["response"] extends StandardSchemaV1
       ? StandardSchemaV1.InferOutput<TSchemas["response"]> | Response
-    : unknown;
+      : unknown;
 
 export type HandlerFn<
   TSchemas extends RouteSchemas,
@@ -191,12 +191,15 @@ export type RouteMeta = {
 // Route definition (what createRoute returns)
 // ---------------------------------------------------------------------------
 
-export type RouteDefinition<TSchemas extends RouteSchemas = RouteSchemas> = {
+export type RouteDefinition<
+  TSchemas extends RouteSchemas = RouteSchemas,
+  THandler extends (input: any) => unknown | Promise<unknown> = HandlerFn<TSchemas>,
+> = {
   __brand: "routed:route";
   schemas: TSchemas;
   meta?: RouteMeta;
   middleware: MiddlewareDefinition<any, any>[];
-  handler: (input: any) => unknown | Promise<unknown>;
+  handler: THandler;
 };
 
 // ---------------------------------------------------------------------------

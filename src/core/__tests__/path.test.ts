@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getPathname, matchRoutePath } from "./path.ts";
+import { getPathname, matchRoutePath } from "../path.ts";
 
 describe("path helpers", () => {
   test("getPathname preserves encoded path segments", () => {

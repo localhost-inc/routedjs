@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { generateClientCode } from "./codegen.ts";
+import { generateClientCode } from "../codegen.ts";
 
 describe("generateClientCode", () => {
   test("generates correct imports and route map", () => {

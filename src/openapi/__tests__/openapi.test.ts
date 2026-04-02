@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import { z } from "zod";
-import { createRoute } from "../core/create-route.ts";
-import { createMiddleware } from "../core/create-middleware.ts";
-import { defineRouteTree } from "../core/define-route-tree.ts";
-import { generateOpenAPISpec } from "./index.ts";
+import { createRoute } from "../../core/create-route.ts";
+import { createMiddleware } from "../../core/create-middleware.ts";
+import { defineRouteTree } from "../../core/define-route-tree.ts";
+import { generateOpenAPISpec } from "../index.ts";
 
 const noop = createMiddleware(async ({ next }) => next());
 
@@ -208,7 +208,7 @@ describe("generateOpenAPISpec", () => {
   });
 
   test("built Node ESM output preserves Zod schemas", async () => {
-    const repoRoot = path.resolve(import.meta.dir, "../..");
+    const repoRoot = path.resolve(import.meta.dir, "../../..");
 
     const build = Bun.spawn([process.execPath, "run", "build"], {
       cwd: repoRoot,

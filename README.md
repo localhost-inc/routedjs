@@ -301,6 +301,9 @@ import { app } from "./routed.gen";
 export default { fetch: app.fetch, port: 3000 };
 ```
 
+The generated Hono app preserves Hono client inference for `json` request bodies,
+query params, and typed `await res.json()` responses.
+
 ### Express
 
 ```ts
@@ -477,6 +480,10 @@ The server command comes from `dev.command` in your config.
 ### `routed openapi`
 
 Generates an OpenAPI spec from your routes. Requires `openapi` in your config.
+
+### `bun run examples:generate`
+
+Regenerates the checked-in `examples/*/routed.gen.ts` files. This also runs automatically during `prepublishOnly` so example output stays in sync with the current generator.
 
 ## Benchmarks
 

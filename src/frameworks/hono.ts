@@ -1,6 +1,8 @@
 import { Hono } from "hono";
-import type { Context } from "hono";
+import type { Context, TypedResponse, Input as HonoInput } from "hono";
 import { createMiddleware as createHonoMiddleware } from "hono/factory";
+import type { StatusCode } from "hono/utils/http-status";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { composeRouteHandler, type RoutedMiddleware } from "../core/compose.ts";
 import { BaseRouteContext } from "../core/context.ts";
 import { RouteError } from "../core/error.ts";
@@ -13,6 +15,7 @@ import { getResponseSchemaForStatus } from "../core/responses.ts";
 import { validateSchema } from "../core/validate.ts";
 import { generateManifestSource } from "../codegen/manifest.ts";
 import type {
+  InferSchemaOutput,
   MiddlewareDefinition,
   RouteDefinition,
   RouteEntry,
@@ -85,6 +88,65 @@ type GenerateTypedAppInput = {
   outFile: string;
   routesDir: string;
 };
+
+type AwaitedReturn<T> = T extends Promise<infer U> ? AwaitedReturn<U> : T;
+
+type ExcludeRawResponse<T> = Exclude<T, Response>;
+
+type RouteHandlerOutput<TRoute extends RouteDefinition<any, any>> =
+  ExcludeRawResponse<AwaitedReturn<ReturnType<TRoute["handler"]>>>;
+
+type NormalizeStatusCode<T extends string | number> = T extends number
+  ? T
+  : T extends `${infer U extends number}`
+    ? U
+    : never;
+
+type HonoInputShape<TSchemas extends RouteSchemas> =
+  (TSchemas extends { body: infer TBody extends StandardSchemaV1 }
+    ? { json: InferSchemaOutput<TBody> }
+    : {}) &
+  (TSchemas extends { query: infer TQuery extends StandardSchemaV1 }
+    ? { query: InferSchemaOutput<TQuery> }
+    : {});
+
+type HonoRouteInput<TSchemas extends RouteSchemas> =
+  keyof HonoInputShape<TSchemas> extends never
+    ? {}
+    : { in: HonoInputShape<TSchemas> };
+
+type HonoResponseFromResponses<TSchemas extends RouteSchemas> =
+  TSchemas["responses"] extends infer TResponses extends Record<string | number, unknown>
+    ? {
+        [TStatus in keyof TResponses]:
+          TResponses[TStatus] extends infer TSchema
+            ? TypedResponse<
+                InferSchemaOutput<TSchema>,
+                NormalizeStatusCode<Extract<TStatus, string | number>> & StatusCode,
+                "json"
+              >
+            : never;
+      }[keyof TResponses]
+    : never;
+
+type HonoResponseFromSchema<TSchemas extends RouteSchemas> =
+  TSchemas["response"] extends undefined
+    ? never
+    : TypedResponse<InferSchemaOutput<TSchemas["response"]>, 200, "json">;
+
+type HonoResponseFromHandler<TRoute extends RouteDefinition<any, any>> =
+  [RouteHandlerOutput<TRoute>] extends [never]
+    ? TypedResponse
+    : TypedResponse<RouteHandlerOutput<TRoute>, 200, "json">;
+
+type HonoRouteResponse<TRoute extends RouteDefinition<any, any>> =
+  TRoute["schemas"] extends infer TSchemas extends RouteSchemas
+    ? [HonoResponseFromResponses<TSchemas>] extends [never]
+      ? [HonoResponseFromSchema<TSchemas>] extends [never]
+        ? HonoResponseFromHandler<TRoute>
+        : HonoResponseFromSchema<TSchemas>
+      : HonoResponseFromResponses<TSchemas>
+    : TypedResponse;
 
 /**
  * Create a Hono app from a routed route tree.
@@ -284,11 +346,14 @@ async function executeRouteHandler(
  * Wrap a routedjs route definition as a Hono handler.
  * Used by the generated typed app to preserve Hono's type chain.
  */
-export function routeHandler(
-  route: RouteDefinition<RouteSchemas>,
-  routePath: string,
+export function routeHandler<
+  TRoute extends RouteDefinition<any, any>,
+  TPath extends string,
+>(
+  route: TRoute,
+  routePath: TPath,
   options?: { validateResponses?: boolean },
-) {
+): (c: Context<any, TPath, HonoRouteInput<TRoute["schemas"]>>) => Promise<HonoRouteResponse<TRoute>> {
   const validateResponses = options?.validateResponses ?? false;
 
   return async (c: Context) => {
@@ -308,28 +373,30 @@ export function routeHandler(
       const execute = composeRouteHandler(chain, terminal);
       const result = await execute(ctx);
 
-      if (result instanceof Response) return result;
+      if (result instanceof Response) {
+        return result as unknown as HonoRouteResponse<TRoute>;
+      }
 
       if (result !== undefined && !ctx.hasBufferedResponseInit()) {
-        return c.json(result as object);
+        return c.json(result as object) as unknown as HonoRouteResponse<TRoute>;
       }
 
       if (result === undefined) {
         const headers = ctx.getBufferedHeaders();
-        return new Response(null, { status: ctx.getBufferedStatus(), headers });
+        return new Response(null, { status: ctx.getBufferedStatus(), headers }) as unknown as HonoRouteResponse<TRoute>;
       }
 
       ctx.forEachBufferedHeader((value, key) => {
         c.header(key, value);
       });
       c.status(ctx.getBufferedStatus() as never);
-      return c.json(result as object);
+      return c.json(result as object) as unknown as HonoRouteResponse<TRoute>;
     } catch (err) {
       if (err instanceof RouteError) {
         return c.json(
           { error: err.message, ...(err.data ? { data: err.data } : {}) },
           err.status as never,
-        );
+        ) as unknown as HonoRouteResponse<TRoute>;
       }
       throw err;
     }

@@ -1,6 +1,6 @@
 {
   "name": "routedjs",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "type": "module",
   "description": "File-system routing for APIs. Drop a file, get an endpoint.",
   "license": "MIT",
@@ -96,7 +96,8 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test src",
     "bench": "bun run bench/index.ts",
-    "prepublishOnly": "bun run build && bun test"
+    "examples:generate": "bun run scripts/generate-examples.ts",
+    "prepublishOnly": "bun run examples:generate && bun run build && bun test"
   },
   "dependencies": {
     "@standard-schema/spec": "^1.1.0",

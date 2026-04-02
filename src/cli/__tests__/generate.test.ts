@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { filePathToUrlPath, parseMethod, resolveMiddlewareForRoute } from "./generate.ts";
-import type { ScannedMiddleware } from "./generate.ts";
+import { filePathToUrlPath, parseMethod, resolveMiddlewareForRoute } from "../generate.ts";
+import type { ScannedMiddleware } from "../generate.ts";
 
 describe("parseMethod", () => {
   test("extracts method from route filename", () => {

@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { createRoute } from "../core/create-route.ts";
-import { createMiddleware } from "../core/create-middleware.ts";
-import { defineRouteTree } from "../core/define-route-tree.ts";
-import { createHonoApp } from "../frameworks/hono.ts";
-import { createClient, ClientError, type RouteMap, type Client } from "./index.ts";
+import { createRoute } from "../../core/create-route.ts";
+import { createMiddleware } from "../../core/create-middleware.ts";
+import { defineRouteTree } from "../../core/define-route-tree.ts";
+import { createHonoApp } from "../../frameworks/hono.ts";
+import { createClient, ClientError, type RouteMap, type Client } from "../index.ts";
 
 // ---------------------------------------------------------------------------
 // Test route tree

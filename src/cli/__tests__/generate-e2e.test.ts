@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { generate } from "./generate.ts";
+import { generate } from "../generate.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

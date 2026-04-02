@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { createRoute } from "./create-route.ts";
-import { createMiddleware } from "./create-middleware.ts";
-import { defineRouteTree } from "./define-route-tree.ts";
-import { BaseRouteContext } from "./context.ts";
-import { RouteError } from "./error.ts";
+import { createRoute } from "../create-route.ts";
+import { createMiddleware } from "../create-middleware.ts";
+import { defineRouteTree } from "../define-route-tree.ts";
+import { BaseRouteContext } from "../context.ts";
+import { RouteError } from "../error.ts";
 import { z } from "zod";
-import type { RouteContext } from "./context.ts";
-import type { RouteTree, TypedRouteContext } from "./types.ts";
+import type { RouteContext } from "../context.ts";
+import type { RouteTree, TypedRouteContext } from "../types.ts";
 
-declare module "../index.ts" {
+declare module "../../index.ts" {
   interface Register {
     appContext: {
       db: {

@@ -1,5 +1,5 @@
 import type {
-  HandlerFn,
+  HandlerInput,
   MergeMiddlewareState,
   MiddlewareDefinition,
   MiddlewareFn,
@@ -28,20 +28,27 @@ function normalizeMiddleware(
 export function createRoute<
   TSchemas extends RouteSchemas,
   const TMiddleware extends readonly MiddlewareDefinition<any, any>[],
+  TReturn,
 >(options: {
   schemas?: TSchemas;
   meta?: RouteMeta;
   middleware: [...TMiddleware] & ValidMiddlewareChain<TMiddleware>;
-  handler: NoInfer<HandlerFn<TSchemas, MergeMiddlewareState<TMiddleware>>>;
-}): RouteDefinition<TSchemas>;
+  handler: (input: HandlerInput<TSchemas, MergeMiddlewareState<TMiddleware>>) => TReturn;
+}): RouteDefinition<
+  TSchemas,
+  (input: HandlerInput<TSchemas, MergeMiddlewareState<TMiddleware>>) => TReturn
+>;
 
 // Overload 2: no middleware or inline-only middleware
-export function createRoute<TSchemas extends RouteSchemas = RouteSchemas>(options: {
+export function createRoute<
+  TSchemas extends RouteSchemas = {},
+  TReturn = unknown,
+>(options: {
   schemas?: TSchemas;
   meta?: RouteMeta;
   middleware?: MiddlewareFn[];
-  handler: HandlerFn<TSchemas>;
-}): RouteDefinition<TSchemas>;
+  handler: (input: HandlerInput<TSchemas>) => TReturn;
+}): RouteDefinition<TSchemas, (input: HandlerInput<TSchemas>) => TReturn>;
 
 // Implementation
 export function createRoute(
@@ -49,9 +56,12 @@ export function createRoute(
     schemas?: RouteSchemas;
     meta?: RouteMeta;
     middleware?: (MiddlewareDefinition<any, any> | MiddlewareFn)[];
-    handler: HandlerFn<any, any>;
+    handler: (input: HandlerInput<any, any>) => unknown | Promise<unknown>;
   },
-): RouteDefinition {
+): RouteDefinition<
+  RouteSchemas,
+  (input: HandlerInput<any, any>) => unknown | Promise<unknown>
+> {
   return {
     __brand: "routed:route",
     schemas: (options.schemas ?? {}) as RouteSchemas,
