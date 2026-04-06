@@ -6,93 +6,93 @@ import { routeHandler, wrapMiddleware } from "routedjs/hono";
 import middleware0 from "./routes/_middleware.ts";
 import middleware1 from "./routes/users/_middleware.ts";
 
-import route0 from "./routes/health.get.route.ts";
-import route1 from "./routes/me/index.get.route.ts";
-import route2 from "./routes/_internal/metrics.get.route.ts";
-import route3 from "./routes/users/index.get.route.ts";
-import route4 from "./routes/users/index.post.route.ts";
-import route5 from "./routes/users/$userId.delete.route.ts";
-import route6 from "./routes/users/$userId.get.route.ts";
-import route7 from "./routes/users/$userId.put.route.ts";
-import route8 from "./routes/users/$userId/visits.get.route.ts";
-import route9 from "./routes/users/$userId/visits/$visitId.get.route.ts";
+import route0 from "./routes/_internal/metrics.get.route.ts";
+import route1 from "./routes/health.get.route.ts";
+import route2 from "./routes/users/$userId/visits/$visitId.get.route.ts";
+import route3 from "./routes/users/$userId/visits.get.route.ts";
+import route4 from "./routes/users/$userId.delete.route.ts";
+import route5 from "./routes/users/$userId.get.route.ts";
+import route6 from "./routes/users/$userId.put.route.ts";
+import route7 from "./routes/users/index.get.route.ts";
+import route8 from "./routes/users/index.post.route.ts";
+import route9 from "./routes/me/index.get.route.ts";
 
 export const routeTree = defineRouteTree([
   {
-    path: "/health",
+    path: "/metrics",
     method: "get",
     route: route0,
     middleware: [middleware0],
   },
   {
-    path: "/me",
+    path: "/health",
     method: "get",
     route: route1,
     middleware: [middleware0],
   },
   {
-    path: "/metrics",
+    path: "/users/:userId/visits/:visitId",
     method: "get",
     route: route2,
-    middleware: [middleware0],
-  },
-  {
-    path: "/users",
-    method: "get",
-    route: route3,
-    middleware: [middleware0, middleware1],
-  },
-  {
-    path: "/users",
-    method: "post",
-    route: route4,
-    middleware: [middleware0, middleware1],
-  },
-  {
-    path: "/users/:userId",
-    method: "delete",
-    route: route5,
-    middleware: [middleware0, middleware1],
-  },
-  {
-    path: "/users/:userId",
-    method: "get",
-    route: route6,
-    middleware: [middleware0, middleware1],
-  },
-  {
-    path: "/users/:userId",
-    method: "put",
-    route: route7,
     middleware: [middleware0, middleware1],
   },
   {
     path: "/users/:userId/visits",
     method: "get",
+    route: route3,
+    middleware: [middleware0, middleware1],
+  },
+  {
+    path: "/users/:userId",
+    method: "delete",
+    route: route4,
+    middleware: [middleware0, middleware1],
+  },
+  {
+    path: "/users/:userId",
+    method: "get",
+    route: route5,
+    middleware: [middleware0, middleware1],
+  },
+  {
+    path: "/users/:userId",
+    method: "put",
+    route: route6,
+    middleware: [middleware0, middleware1],
+  },
+  {
+    path: "/users",
+    method: "get",
+    route: route7,
+    middleware: [middleware0, middleware1],
+  },
+  {
+    path: "/users",
+    method: "post",
     route: route8,
     middleware: [middleware0, middleware1],
   },
   {
-    path: "/users/:userId/visits/:visitId",
+    path: "/me",
     method: "get",
     route: route9,
-    middleware: [middleware0, middleware1],
+    middleware: [middleware0],
   },
 ]);
 
 export const app = new Hono()
   .use("*", wrapMiddleware(middleware0))
   .use("/users/*", wrapMiddleware(middleware1))
-  .get("/health", routeHandler(route0, "/health"))
-  .get("/me", routeHandler(route1, "/me"))
-  .get("/metrics", routeHandler(route2, "/metrics"))
-  .get("/users", routeHandler(route3, "/users"))
-  .post("/users", routeHandler(route4, "/users"))
-  .delete("/users/:userId", routeHandler(route5, "/users/:userId"))
-  .get("/users/:userId", routeHandler(route6, "/users/:userId"))
-  .put("/users/:userId", routeHandler(route7, "/users/:userId"))
-  .get("/users/:userId/visits", routeHandler(route8, "/users/:userId/visits"))
-  .get("/users/:userId/visits/:visitId", routeHandler(route9, "/users/:userId/visits/:visitId"))
+  .get("/metrics", routeHandler(route0, "/metrics"))
+  .get("/health", routeHandler(route1, "/health"))
+  .get("/users/:userId/visits/:visitId", routeHandler(route2, "/users/:userId/visits/:visitId"))
+  .get("/users/:userId/visits", routeHandler(route3, "/users/:userId/visits"))
+  .delete("/users/:userId", routeHandler(route4, "/users/:userId"))
+  .get("/users/:userId", routeHandler(route5, "/users/:userId"))
+  .put("/users/:userId", routeHandler(route6, "/users/:userId"))
+  .get("/users", routeHandler(route7, "/users"))
+  .post("/users", routeHandler(route8, "/users"))
+  .get("/me", routeHandler(route9, "/me"))
 ;
 
 export type AppType = typeof app;
