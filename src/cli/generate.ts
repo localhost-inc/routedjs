@@ -5,6 +5,7 @@ import {
   type CodegenMiddleware,
   type CodegenRoute,
 } from "../codegen/manifest.ts";
+import { compareRoutePathSpecificity } from "../core/path.ts";
 import { HTTP_METHODS, type HttpMethod } from "../core/types.ts";
 
 // ---------------------------------------------------------------------------
@@ -132,8 +133,9 @@ async function scanRoutes(routesDir: string): Promise<ScannedRoute[]> {
     });
   }
 
-  // Sort for deterministic output: by path, then method
-  routes.sort((a, b) => a.urlPath.localeCompare(b.urlPath) || a.method.localeCompare(b.method));
+  // Sort by route specificity so generated registration order matches runtime matching:
+  // static segments before params, params before splats, then method for stability.
+  routes.sort((a, b) => compareRoutePathSpecificity(a.urlPath, b.urlPath) || a.method.localeCompare(b.method));
 
   return routes;
 }

@@ -276,7 +276,7 @@ describe("generate (end-to-end)", () => {
     expect(content).toContain('path: "/storage/:asset*"');
   });
 
-  test("routes are sorted by path then method", async () => {
+  test("routes preserve method order within the same path after specificity sorting", async () => {
     const routesDir = path.join(tmpDir, "routes");
     const outFile = path.join(tmpDir, "manifest.ts");
 
@@ -294,10 +294,8 @@ describe("generate (end-to-end)", () => {
       (m) => m[1],
     );
 
-    // "/" should come before "/users"
-    expect(pathMatches.indexOf("/")).toBeLessThan(
-      pathMatches.indexOf("/users"),
-    );
+    // Same-path methods should stay stable after route specificity sorting.
+    expect(pathMatches.filter((path) => path === "/users")).toHaveLength(2);
 
     // Find method lines in order for /users
     const lines = content.split("\n");
@@ -312,6 +310,26 @@ describe("generate (end-to-end)", () => {
 
     // "get" should come before "post" for /users
     expect(usersMethods).toEqual(["get", "post"]);
+  });
+
+  test("static sibling routes are emitted before parameterized siblings", async () => {
+    const routesDir = path.join(tmpDir, "routes");
+    const outFile = path.join(tmpDir, "manifest.ts");
+
+    await writeRouteFile(routesDir, "workspaces/$id.get.route.ts");
+    await writeRouteFile(routesDir, "workspaces/activity.get.route.ts");
+    await writeRouteFile(routesDir, "workspaces/$$path.get.route.ts");
+
+    await generate({ routesDir, outFile });
+
+    const content = await readFile(outFile, "utf-8");
+    const pathMatches = [...content.matchAll(/path: "([^"]+)"/g)].map((m) => m[1]);
+
+    expect(pathMatches).toEqual([
+      "/workspaces/activity",
+      "/workspaces/:id",
+      "/workspaces/:path*",
+    ]);
   });
 
   test("all HTTP methods are correctly extracted", async () => {

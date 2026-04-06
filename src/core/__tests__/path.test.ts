@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getPathname, matchRoutePath } from "../path.ts";
+import { compareRoutePathSpecificity, getPathname, matchRoutePath } from "../path.ts";
 
 describe("path helpers", () => {
   test("getPathname preserves encoded path segments", () => {
@@ -16,5 +16,21 @@ describe("path helpers", () => {
     expect(matchRoutePath("/storage/:path*", "/storage/a%2Fb/c%20d")).toEqual({
       path: ["a/b", "c d"],
     });
+  });
+
+  test("compareRoutePathSpecificity ranks static segments before params and params before splats", () => {
+    const paths = [
+      "/workspaces/:id",
+      "/workspaces/activity",
+      "/workspaces/:path*",
+      "/workspaces",
+    ];
+
+    expect(paths.sort(compareRoutePathSpecificity)).toEqual([
+      "/workspaces/activity",
+      "/workspaces/:id",
+      "/workspaces/:path*",
+      "/workspaces",
+    ]);
   });
 });
