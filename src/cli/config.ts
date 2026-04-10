@@ -2,6 +2,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { MiddlewareDefinition } from "../core/types.ts";
 
+export type OpenAPISpecVersion = "3.0.3" | "3.1.0";
+
 export type RoutedConfig = {
   /** Global middleware applied to all routes (runs before directory middleware). */
   middleware?: MiddlewareDefinition<any, any>[];
@@ -20,6 +22,8 @@ export type RoutedConfig = {
     title: string;
     /** API version for the OpenAPI spec. */
     version: string;
+    /** OpenAPI document version. Defaults to 3.1.0. */
+    specVersion?: OpenAPISpecVersion;
     /** Optional API description. */
     description?: string;
     /** Optional server URLs. */

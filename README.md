@@ -397,13 +397,14 @@ When enabled, routedjs validates plain-object returns against the schema matchin
 
 ## OpenAPI
 
-Routed generates OpenAPI 3.1 specs from your route schemas and metadata:
+Routed generates OpenAPI specs from your route schemas and metadata. It defaults to OpenAPI `3.1.0`, and can also emit `3.0.3` when you need a 3.0-compatible consumer:
 
 ```ts
 import { generateOpenAPISpec } from "routedjs/openapi";
 
 const spec = generateOpenAPISpec(routeTree, {
   info: { title: "My API", version: "1.0.0" },
+  specVersion: "3.0.3",
 });
 ```
 
@@ -448,6 +449,7 @@ export default defineConfig({
   openapi: {
     title: "My API",
     version: "1.0.0",
+    specVersion: "3.0.3",
     outFile: "./openapi.json",
   },
 });
@@ -457,6 +459,8 @@ export default defineConfig({
 routed openapi
 # → writes openapi.json
 ```
+
+Use `specVersion: "3.0.3"` for generators that expect OpenAPI 3.0 nullable semantics. Leave it unset to emit `3.1.0` with JSON Schema draft 2020-12 output.
 
 ## CLI
 

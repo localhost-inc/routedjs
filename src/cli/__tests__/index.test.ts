@@ -91,4 +91,87 @@ describe("routed openapi", () => {
       await rm(projectDir, { recursive: true, force: true });
     }
   });
+
+  test("respects openapi.specVersion from config", async () => {
+    const projectDir = await mkdtemp(path.join(repoRoot, ".tmp-openapi-"));
+
+    try {
+      const routesDir = path.join(projectDir, "routes");
+      await mkdir(routesDir, { recursive: true });
+
+      await writeFile(
+        path.join(routesDir, "health.get.route.ts"),
+        [
+          'import { createRoute } from "routedjs";',
+          "",
+          "export default createRoute({",
+          "  schemas: {",
+          "    response: {",
+          "      '~standard': {",
+          "        vendor: 'test',",
+          "        version: 1,",
+          "        validate: () => ({ value: { ok: true } }),",
+          "        jsonSchema: {",
+          "          output: ({ target }) => target === 'openapi-3.0'",
+          "            ? {",
+          "                type: 'object',",
+          "                properties: { ok: { type: 'boolean', nullable: true } },",
+          "              }",
+          "            : {",
+          "                type: 'object',",
+          "                properties: { ok: { anyOf: [{ type: 'boolean' }, { type: 'null' }] } },",
+          "              },",
+          "        },",
+          "      },",
+          "    },",
+          "  },",
+          "  handler: async () => ({ ok: true }),",
+          "});",
+          "",
+        ].join("\n"),
+      );
+
+      await writeFile(
+        path.join(projectDir, "routed.config.ts"),
+        [
+          'import { defineConfig } from "routedjs";',
+          "",
+          "export default defineConfig({",
+          '  routesDir: "./routes",',
+          '  outFile: "./routed.gen.ts",',
+          "  openapi: {",
+          '    title: "Test API",',
+          '    version: "1.0.0",',
+          '    specVersion: "3.0.3",',
+          '    outFile: "./openapi.json",',
+          "  },",
+          "});",
+          "",
+        ].join("\n"),
+      );
+
+      const openapi = await runCli(["openapi"], projectDir);
+      expect(openapi.exitCode, `${openapi.stdout}\n${openapi.stderr}`).toBe(0);
+
+      const spec = JSON.parse(
+        await readFile(path.join(projectDir, "openapi.json"), "utf-8"),
+      ) as {
+        openapi: string;
+        jsonSchemaDialect?: string;
+        paths: Record<string, Record<string, { responses: Record<string, { content?: Record<string, { schema?: Record<string, unknown> }> }> }>>;
+      };
+
+      const responseSchema =
+        spec.paths["/health"]!.get!.responses["200"]!.content?.["application/json"]
+          ?.schema as Record<string, unknown> | undefined;
+      const properties = responseSchema?.properties as Record<string, unknown> | undefined;
+      const okSchema = properties?.ok as Record<string, unknown> | undefined;
+
+      expect(spec.openapi).toBe("3.0.3");
+      expect(spec.jsonSchemaDialect).toBeUndefined();
+      expect(okSchema).toEqual({ type: "boolean", nullable: true });
+    } finally {
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
 });

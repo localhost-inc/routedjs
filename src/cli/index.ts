@@ -82,6 +82,7 @@ async function runOpenAPI() {
       version: config.openapi.version,
       ...(config.openapi.description ? { description: config.openapi.description } : {}),
     },
+    ...(config.openapi.specVersion ? { specVersion: config.openapi.specVersion } : {}),
     ...(config.openapi.servers ? { servers: config.openapi.servers } : {}),
   });
 

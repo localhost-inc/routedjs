@@ -21,14 +21,19 @@ type OpenAPIServer = {
   description?: string;
 };
 
+type OpenAPISpecVersion = "3.0.3" | "3.1.0";
+type JSONSchemaTarget = "draft-2020-12" | "openapi-3.0";
+
 type OpenAPIConfig = {
   info: OpenAPIInfo;
+  specVersion?: OpenAPISpecVersion;
   servers?: OpenAPIServer[];
 };
 
 type OpenAPISpec = {
   openapi: string;
   info: OpenAPIInfo;
+  jsonSchemaDialect?: string;
   servers?: OpenAPIServer[];
   paths: Record<string, Record<string, unknown>>;
   components?: { schemas: Record<string, unknown> };
@@ -38,6 +43,8 @@ export function generateOpenAPISpec(
   routeTree: RouteTree,
   config: OpenAPIConfig,
 ): OpenAPISpec {
+  const specVersion = config.specVersion ?? "3.1.0";
+  const schemaTarget = getSchemaTarget(specVersion);
   const paths: Record<string, Record<string, unknown>> = {};
   const componentSchemas: Record<string, unknown> = {};
 
@@ -48,12 +55,15 @@ export function generateOpenAPISpec(
       paths[openApiPath] = {};
     }
 
-    paths[openApiPath]![entry.method] = buildOperation(entry, componentSchemas);
+    paths[openApiPath]![entry.method] = buildOperation(entry, componentSchemas, schemaTarget);
   }
 
   const spec: OpenAPISpec = {
-    openapi: "3.1.0",
+    openapi: specVersion,
     info: config.info,
+    ...(specVersion === "3.1.0"
+      ? { jsonSchemaDialect: "https://json-schema.org/draft/2020-12/schema" }
+      : {}),
     ...(config.servers ? { servers: config.servers } : {}),
     paths,
   };
@@ -72,6 +82,7 @@ export function generateOpenAPISpec(
 function buildOperation(
   entry: RouteEntry,
   componentSchemas: Record<string, unknown>,
+  schemaTarget: JSONSchemaTarget,
 ): Record<string, unknown> {
   const { route, path, method } = entry;
   const { schemas, meta } = route;
@@ -88,13 +99,13 @@ function buildOperation(
   const parameters: unknown[] = [];
 
   if (schemas.params) {
-    parameters.push(...extractPathParams(schemas.params, path, componentSchemas));
+    parameters.push(...extractPathParams(schemas.params, path, componentSchemas, schemaTarget));
   } else {
     parameters.push(...inferPathParams(path));
   }
 
   if (schemas.query) {
-    parameters.push(...extractQueryParams(schemas.query, componentSchemas));
+    parameters.push(...extractQueryParams(schemas.query, componentSchemas, schemaTarget));
   }
 
   if (parameters.length > 0) {
@@ -103,7 +114,7 @@ function buildOperation(
 
   // Request body
   if (schemas.body) {
-    const bodySchema = schemaToJsonSchema(schemas.body, componentSchemas);
+    const bodySchema = schemaToJsonSchema(schemas.body, componentSchemas, schemaTarget);
     if (bodySchema) {
       operation.requestBody = {
         required: true,
@@ -124,7 +135,7 @@ function buildOperation(
       Array.from(responseSchemas.entries())
         .sort(([leftStatus], [rightStatus]) => leftStatus - rightStatus)
         .map(([status, schema]) => {
-          const responseSchema = schemaToJsonSchema(schema, componentSchemas);
+          const responseSchema = schemaToJsonSchema(schema, componentSchemas, schemaTarget);
 
           return [
             String(status),
@@ -162,8 +173,9 @@ function extractPathParams(
   paramsSchema: StandardSchemaV1,
   path: string,
   componentSchemas: Record<string, unknown>,
+  schemaTarget: JSONSchemaTarget,
 ): unknown[] {
-  const jsonSchema = schemaToJsonSchema(paramsSchema, componentSchemas);
+  const jsonSchema = schemaToJsonSchema(paramsSchema, componentSchemas, schemaTarget);
   if (!jsonSchema) return [];
 
   const properties = (jsonSchema as Record<string, unknown>).properties as
@@ -224,8 +236,9 @@ function inferPathParams(path: string): unknown[] {
 function extractQueryParams(
   querySchema: StandardSchemaV1,
   componentSchemas: Record<string, unknown>,
+  schemaTarget: JSONSchemaTarget,
 ): unknown[] {
-  const jsonSchema = schemaToJsonSchema(querySchema, componentSchemas);
+  const jsonSchema = schemaToJsonSchema(querySchema, componentSchemas, schemaTarget);
   if (!jsonSchema) return [];
 
   const properties = (jsonSchema as Record<string, unknown>).properties as
@@ -255,6 +268,7 @@ function extractQueryParams(
 function schemaToJsonSchema(
   schema: StandardSchemaV1,
   componentSchemas: Record<string, unknown>,
+  schemaTarget: JSONSchemaTarget,
 ): unknown | null {
   const std = schema["~standard"] as unknown as Record<string, unknown>;
 
@@ -269,7 +283,7 @@ function schemaToJsonSchema(
   ) {
     try {
       const result = (std.jsonSchema as { output: (opts: { target: string }) => unknown }).output({
-        target: "openapi-3.0",
+        target: schemaTarget,
       }) as Record<string, unknown>;
 
       return extractDefinitions(result, componentSchemas);
@@ -309,13 +323,16 @@ function extractDefinitions(
   jsonSchema: Record<string, unknown>,
   componentSchemas: Record<string, unknown>,
 ): Record<string, unknown> {
-  const { definitions, id, ...rest } = jsonSchema;
+  const { definitions, $defs, $schema, id, ...rest } = jsonSchema;
 
-  if (definitions && typeof definitions === "object") {
-    const defs = definitions as Record<string, unknown>;
+  for (const defsValue of [definitions, $defs]) {
+    if (!defsValue || typeof defsValue !== "object") continue;
+
+    const defs = defsValue as Record<string, unknown>;
     for (const [name, defSchema] of Object.entries(defs)) {
       const cleaned = { ...(defSchema as Record<string, unknown>) };
       delete cleaned.id;
+      delete cleaned.$schema;
       componentSchemas[name] = rewriteRefs(cleaned);
     }
   }
@@ -344,11 +361,19 @@ function rewriteRefs(value: unknown): unknown {
   const result: Record<string, unknown> = {};
 
   for (const [key, val] of Object.entries(obj)) {
-    if (key === "$ref" && typeof val === "string" && val.startsWith("#/definitions/")) {
-      result[key] = val.replace("#/definitions/", "#/components/schemas/");
-    } else {
-      result[key] = rewriteRefs(val);
+    if (key === "$ref" && typeof val === "string") {
+      if (val.startsWith("#/definitions/")) {
+        result[key] = val.replace("#/definitions/", "#/components/schemas/");
+        continue;
+      }
+
+      if (val.startsWith("#/$defs/")) {
+        result[key] = val.replace("#/$defs/", "#/components/schemas/");
+        continue;
+      }
     }
+
+    result[key] = rewriteRefs(val);
   }
 
   return result;
@@ -383,4 +408,8 @@ function getResponseDescription(status: number, summary?: string): string {
 
 function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function getSchemaTarget(specVersion: OpenAPISpecVersion): JSONSchemaTarget {
+  return specVersion === "3.0.3" ? "openapi-3.0" : "draft-2020-12";
 }

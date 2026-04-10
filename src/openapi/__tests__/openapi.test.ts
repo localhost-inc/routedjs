@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { createRoute } from "../../core/create-route.ts";
 import { createMiddleware } from "../../core/create-middleware.ts";
@@ -100,12 +102,114 @@ const spec = generateOpenAPISpec(routeTree, {
   servers: [{ url: "http://localhost:3000" }],
 });
 
+function makeDialectSpec(specVersion: "3.0.3" | "3.1.0") {
+  const sharedUserSchema = z
+    .object({
+      id: z.string(),
+      nickname: z.string().nullable(),
+    })
+    .meta({ id: "User" });
+
+  return generateOpenAPISpec(
+    defineRouteTree([
+      {
+        path: "/dialect",
+        method: "get",
+        route: createRoute({
+          schemas: {
+            query: z.object({
+              limit: z.number().int().positive(),
+            }),
+            response: z
+              .object({
+                user: sharedUserSchema,
+              })
+              .meta({ id: "GetDialectResponse" }),
+          },
+          handler: async () => ({
+            user: { id: "1", nickname: null },
+          }),
+        }),
+        middleware: [],
+      },
+    ]),
+    {
+      info: { title: "Dialect API", version: "1.0.0" },
+      specVersion,
+    },
+  );
+}
+
 describe("generateOpenAPISpec", () => {
   test("produces valid OpenAPI 3.1 structure", () => {
     expect(spec.openapi).toBe("3.1.0");
+    expect(spec.jsonSchemaDialect).toBe("https://json-schema.org/draft/2020-12/schema");
     expect(spec.info.title).toBe("Test API");
     expect(spec.info.version).toBe("1.0.0");
     expect(spec.servers).toHaveLength(1);
+  });
+
+  test("emits draft-2020-12 semantics for OpenAPI 3.1.0", () => {
+    const dialectSpec = makeDialectSpec("3.1.0");
+    const getDialect = dialectSpec.paths["/dialect"]!.get as Record<string, unknown>;
+    const params = getDialect.parameters as Array<Record<string, unknown>>;
+    const limitSchema = params.find((param) => param.name === "limit")?.schema as
+      | Record<string, unknown>
+      | undefined;
+    const responseSchema = (
+      (
+        ((getDialect.responses as Record<string, Record<string, unknown>>)["200"]!.content as Record<
+          string,
+          Record<string, unknown>
+        >)["application/json"]!.schema
+      ) as Record<string, unknown>
+    );
+    const userSchema = dialectSpec.components?.schemas["User"] as Record<string, unknown>;
+    const nicknameSchema = (userSchema.properties as Record<string, unknown>).nickname as
+      | Record<string, unknown>
+      | undefined;
+
+    expect(dialectSpec.openapi).toBe("3.1.0");
+    expect(dialectSpec.jsonSchemaDialect).toBe("https://json-schema.org/draft/2020-12/schema");
+    expect(limitSchema?.exclusiveMinimum).toBe(0);
+    expect(limitSchema).not.toHaveProperty("nullable");
+    expect(responseSchema.$ref).toBe("#/components/schemas/GetDialectResponse");
+    expect(responseSchema).not.toHaveProperty("definitions");
+    expect(responseSchema).not.toHaveProperty("$defs");
+    expect(userSchema).toBeDefined();
+    expect(nicknameSchema?.anyOf).toEqual([{ type: "string" }, { type: "null" }]);
+    expect(nicknameSchema).not.toHaveProperty("nullable");
+  });
+
+  test("emits OpenAPI 3.0.3 semantics when requested", () => {
+    const dialectSpec = makeDialectSpec("3.0.3");
+    const getDialect = dialectSpec.paths["/dialect"]!.get as Record<string, unknown>;
+    const params = getDialect.parameters as Array<Record<string, unknown>>;
+    const limitSchema = params.find((param) => param.name === "limit")?.schema as
+      | Record<string, unknown>
+      | undefined;
+    const responseSchema = (
+      (
+        ((getDialect.responses as Record<string, Record<string, unknown>>)["200"]!.content as Record<
+          string,
+          Record<string, unknown>
+        >)["application/json"]!.schema
+      ) as Record<string, unknown>
+    );
+    const userSchema = dialectSpec.components?.schemas["User"] as Record<string, unknown>;
+    const nicknameSchema = (userSchema.properties as Record<string, unknown>).nickname as
+      | Record<string, unknown>
+      | undefined;
+
+    expect(dialectSpec.openapi).toBe("3.0.3");
+    expect(dialectSpec.jsonSchemaDialect).toBeUndefined();
+    expect(limitSchema?.exclusiveMinimum).toBe(true);
+    expect(limitSchema).not.toHaveProperty("$schema");
+    expect(responseSchema.$ref).toBe("#/components/schemas/GetDialectResponse");
+    expect(responseSchema).not.toHaveProperty("definitions");
+    expect(responseSchema).not.toHaveProperty("$defs");
+    expect(userSchema).toBeDefined();
+    expect(nicknameSchema).toEqual({ type: "string", nullable: true });
   });
 
   test("generates paths with correct methods", () => {
@@ -209,18 +313,39 @@ describe("generateOpenAPISpec", () => {
 
   test("built Node ESM output preserves Zod schemas", async () => {
     const repoRoot = path.resolve(import.meta.dir, "../../..");
+    const buildDir = await mkdtemp(path.join(repoRoot, ".tmp-openapi-build-"));
 
-    const build = Bun.spawn([process.execPath, "run", "build"], {
-      cwd: repoRoot,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const buildExitCode = await build.exited;
-    const buildStderr = await new Response(build.stderr).text();
-    expect(buildExitCode, buildStderr).toBe(0);
+    try {
+      // Build into an isolated temp output so this test never races with another
+      // process that cleans or reads the package's real dist/ directory.
+      const build = Bun.spawn(
+        [
+          "./node_modules/.bin/tsup",
+          "src/openapi/index.ts",
+          "--format",
+          "esm",
+          "--clean",
+          "--silent",
+          "--out-dir",
+          path.join(buildDir, "dist", "openapi"),
+          "--no-config",
+        ],
+        {
+          cwd: repoRoot,
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const buildExitCode = await build.exited;
+      const buildStderr = await new Response(build.stderr).text();
+      expect(buildExitCode, buildStderr).toBe(0);
 
-    const nodeScript = `
-      import { generateOpenAPISpec } from "./dist/openapi/index.js";
+      const builtModuleUrl = pathToFileURL(
+        path.join(buildDir, "dist", "openapi", "index.js"),
+      ).href;
+
+      const nodeScript = `
+      import { generateOpenAPISpec } from ${JSON.stringify(builtModuleUrl)};
       import { z } from "zod";
 
       const spec = generateOpenAPISpec([
@@ -247,24 +372,27 @@ describe("generateOpenAPISpec", () => {
       console.log(JSON.stringify(spec));
     `;
 
-    const run = Bun.spawn(["node", "--input-type=module", "-e", nodeScript], {
-      cwd: repoRoot,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const runExitCode = await run.exited;
-    const runStderr = await new Response(run.stderr).text();
-    expect(runExitCode, runStderr).toBe(0);
+      const run = Bun.spawn(["node", "--input-type=module", "-e", nodeScript], {
+        cwd: repoRoot,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const runExitCode = await run.exited;
+      const runStderr = await new Response(run.stderr).text();
+      expect(runExitCode, runStderr).toBe(0);
 
-    const output = await new Response(run.stdout).text();
-    const builtSpec = JSON.parse(output) as {
-      paths: Record<string, Record<string, { parameters?: Array<{ schema?: Record<string, unknown> }>; responses: Record<string, { content?: Record<string, unknown> }> }>>;
-    };
+      const output = await new Response(run.stdout).text();
+      const builtSpec = JSON.parse(output) as {
+        paths: Record<string, Record<string, { parameters?: Array<{ schema?: Record<string, unknown> }>; responses: Record<string, { content?: Record<string, unknown> }> }>>;
+      };
 
-    const getUser = builtSpec.paths["/users/{userId}"]!.get!;
-    expect(getUser.parameters?.[0]?.schema?.type).toBe("string");
-    expect(getUser.parameters?.[0]?.schema?.format).toBe("uuid");
-    expect(getUser.responses["200"]?.content?.["application/json"]).toBeDefined();
-    expect(getUser.responses["404"]?.content?.["application/json"]).toBeDefined();
+      const getUser = builtSpec.paths["/users/{userId}"]!.get!;
+      expect(getUser.parameters?.[0]?.schema?.type).toBe("string");
+      expect(getUser.parameters?.[0]?.schema?.format).toBe("uuid");
+      expect(getUser.responses["200"]?.content?.["application/json"]).toBeDefined();
+      expect(getUser.responses["404"]?.content?.["application/json"]).toBeDefined();
+    } finally {
+      await rm(buildDir, { recursive: true, force: true });
+    }
   });
 });
