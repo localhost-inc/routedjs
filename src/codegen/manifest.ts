@@ -32,6 +32,88 @@ export function toRelativeImport(fromDir: string, toFile: string): string {
   return rel;
 }
 
+export function routeImportName(route: CodegenRoute, routesDir: string): string {
+  return stableImportName("route", routesDir, route.filePath);
+}
+
+export function middlewareImportName(
+  middleware: CodegenMiddleware,
+  routesDir: string,
+): string {
+  return stableImportName("middleware", routesDir, middleware.filePath);
+}
+
+function stableImportName(prefix: string, routesDir: string, filePath: string): string {
+  const relativePath = normalizeImportKey(path.relative(routesDir, filePath));
+  const readableName =
+    prefix === "middleware"
+      ? middlewareIdentifierPath(relativePath)
+      : routeIdentifierPath(relativePath);
+  return `${prefix}_${readableName}`;
+}
+
+function normalizeImportKey(relativePath: string): string {
+  return relativePath.split(path.sep).join("/");
+}
+
+function routeIdentifierPath(relativePath: string): string {
+  return encodeIdentifierSegments(relativePath.replace(/\.route\.tsx?$/, ""));
+}
+
+function middlewareIdentifierPath(relativePath: string): string {
+  const directory = path.posix.dirname(relativePath);
+  if (directory === ".") return "root";
+  return encodeIdentifierSegments(directory);
+}
+
+function encodeIdentifierSegments(value: string): string {
+  return value
+    .split("/")
+    .filter(Boolean)
+    .map(encodeIdentifierSegment)
+    .join("_") || "root";
+}
+
+function encodeIdentifierSegment(segment: string): string {
+  if (segment.startsWith("$$")) {
+    return `catchAll_${encodeIdentifierChars(segment.slice(2))}`;
+  }
+  if (segment.startsWith("$")) {
+    return `param_${encodeIdentifierChars(segment.slice(1))}`;
+  }
+  if (segment.startsWith("_")) {
+    return `group_${encodeIdentifierChars(segment.slice(1))}`;
+  }
+  return encodeIdentifierChars(segment);
+}
+
+function encodeIdentifierChars(value: string): string {
+  let output = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]!;
+    if (/[A-Za-z0-9]/.test(char)) {
+      output += char;
+      continue;
+    }
+
+    switch (char) {
+      case ".":
+        output += "_";
+        break;
+      case "-":
+        output += "_dash_";
+        break;
+      case "_":
+        output += "_us_";
+        break;
+      default:
+        output += `_u${char.codePointAt(0)!.toString(16)}_`;
+        break;
+    }
+  }
+  return output.replace(/^_+|_+$/g, "") || "root";
+}
+
 export function generateManifestSource(
   routes: CodegenRoute[],
   middlewares: CodegenMiddleware[],
@@ -54,8 +136,8 @@ export function generateManifestSource(
   }
 
   const middlewareImportNames: Map<string, string> = new Map();
-  middlewares.forEach((mw, i) => {
-    const importName = `middleware${i}`;
+  middlewares.forEach((mw) => {
+    const importName = middlewareImportName(mw, routesDir);
     middlewareImportNames.set(mw.filePath, importName);
     lines.push(`import ${importName} from "${toRelativeImport(outDir, mw.filePath)}";`);
   });
@@ -65,8 +147,8 @@ export function generateManifestSource(
   }
 
   const routeImportNames: Map<string, string> = new Map();
-  routes.forEach((route, i) => {
-    const importName = `route${i}`;
+  routes.forEach((route) => {
+    const importName = routeImportName(route, routesDir);
     routeImportNames.set(route.filePath, importName);
     lines.push(`import ${importName} from "${toRelativeImport(outDir, route.filePath)}";`);
   });

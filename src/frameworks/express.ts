@@ -16,7 +16,11 @@ import {
 } from "../core/path.ts";
 import { getResponseSchemaForStatus } from "../core/responses.ts";
 import { validateSchema } from "../core/validate.ts";
-import { generateManifestSource } from "../codegen/manifest.ts";
+import {
+  generateManifestSource,
+  middlewareImportName,
+  routeImportName,
+} from "../codegen/manifest.ts";
 import {
   applyResponseHeaders,
   NodeRequestState,
@@ -280,14 +284,14 @@ export async function generateTypedApp(input: {
   lines.push("export const app = express();");
   lines.push("");
 
-  middlewares.forEach((mw, i) => {
+  middlewares.forEach((mw) => {
     const usePath = dirToUsePath(path, mw.directory);
-    lines.push(`app.use("${usePath}", wrapMiddleware(middleware${i}));`);
+    lines.push(`app.use("${usePath}", wrapMiddleware(${middlewareImportName(mw, routesDir)}));`);
   });
 
-  routes.forEach((route, i) => {
+  routes.forEach((route) => {
     const expressPath = route.urlPath.replace(/:(\w+)\*/g, "*$1");
-    lines.push(`app.${route.method}("${expressPath}", routeHandler(route${i}, "${route.urlPath}"));`);
+    lines.push(`app.${route.method}("${expressPath}", routeHandler(${routeImportName(route, routesDir)}, "${route.urlPath}"));`);
   });
 
   lines.push("");

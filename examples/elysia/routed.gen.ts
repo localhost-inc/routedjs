@@ -3,86 +3,86 @@ import { defineRouteTree } from "routedjs";
 import Elysia from "elysia";
 import { routeHandler } from "routedjs/elysia";
 
-import middleware0 from "./routes/_middleware.ts";
-import middleware1 from "./routes/users/_middleware.ts";
+import middleware_root from "./routes/_middleware.ts";
+import middleware_users from "./routes/users/_middleware.ts";
 
-import route0 from "./routes/_internal/metrics.get.route.ts";
-import route1 from "./routes/health.get.route.ts";
-import route2 from "./routes/users/$userId/visits/$visitId.get.route.ts";
-import route3 from "./routes/users/$userId/visits.get.route.ts";
-import route4 from "./routes/users/$userId.delete.route.ts";
-import route5 from "./routes/users/$userId.get.route.ts";
-import route6 from "./routes/users/$userId.put.route.ts";
-import route7 from "./routes/users/index.get.route.ts";
-import route8 from "./routes/users/index.post.route.ts";
+import route_group_internal_metrics_get from "./routes/_internal/metrics.get.route.ts";
+import route_health_get from "./routes/health.get.route.ts";
+import route_users_param_userId_visits_param_visitId_get from "./routes/users/$userId/visits/$visitId.get.route.ts";
+import route_users_param_userId_visits_get from "./routes/users/$userId/visits.get.route.ts";
+import route_users_param_userId_delete from "./routes/users/$userId.delete.route.ts";
+import route_users_param_userId_get from "./routes/users/$userId.get.route.ts";
+import route_users_param_userId_put from "./routes/users/$userId.put.route.ts";
+import route_users_index_get from "./routes/users/index.get.route.ts";
+import route_users_index_post from "./routes/users/index.post.route.ts";
 
 export const routeTree = defineRouteTree([
   {
     path: "/metrics",
     method: "get",
-    route: route0,
-    middleware: [middleware0],
+    route: route_group_internal_metrics_get,
+    middleware: [middleware_root],
   },
   {
     path: "/health",
     method: "get",
-    route: route1,
-    middleware: [middleware0],
+    route: route_health_get,
+    middleware: [middleware_root],
   },
   {
     path: "/users/:userId/visits/:visitId",
     method: "get",
-    route: route2,
-    middleware: [middleware0, middleware1],
+    route: route_users_param_userId_visits_param_visitId_get,
+    middleware: [middleware_root, middleware_users],
   },
   {
     path: "/users/:userId/visits",
     method: "get",
-    route: route3,
-    middleware: [middleware0, middleware1],
+    route: route_users_param_userId_visits_get,
+    middleware: [middleware_root, middleware_users],
   },
   {
     path: "/users/:userId",
     method: "delete",
-    route: route4,
-    middleware: [middleware0, middleware1],
+    route: route_users_param_userId_delete,
+    middleware: [middleware_root, middleware_users],
   },
   {
     path: "/users/:userId",
     method: "get",
-    route: route5,
-    middleware: [middleware0, middleware1],
+    route: route_users_param_userId_get,
+    middleware: [middleware_root, middleware_users],
   },
   {
     path: "/users/:userId",
     method: "put",
-    route: route6,
-    middleware: [middleware0, middleware1],
+    route: route_users_param_userId_put,
+    middleware: [middleware_root, middleware_users],
   },
   {
     path: "/users",
     method: "get",
-    route: route7,
-    middleware: [middleware0, middleware1],
+    route: route_users_index_get,
+    middleware: [middleware_root, middleware_users],
   },
   {
     path: "/users",
     method: "post",
-    route: route8,
-    middleware: [middleware0, middleware1],
+    route: route_users_index_post,
+    middleware: [middleware_root, middleware_users],
   },
 ]);
 
 export const app = new Elysia()
-  .get("/metrics", routeHandler(route0, "/metrics") as any)
-  .get("/health", routeHandler(route1, "/health") as any)
-  .get("/users/:userId/visits/:visitId", routeHandler(route2, "/users/:userId/visits/:visitId") as any)
-  .get("/users/:userId/visits", routeHandler(route3, "/users/:userId/visits") as any)
-  .delete("/users/:userId", routeHandler(route4, "/users/:userId") as any)
-  .get("/users/:userId", routeHandler(route5, "/users/:userId") as any)
-  .put("/users/:userId", routeHandler(route6, "/users/:userId") as any)
-  .get("/users", routeHandler(route7, "/users") as any)
-  .post("/users", routeHandler(route8, "/users") as any)
+  .get("/metrics", routeHandler(route_group_internal_metrics_get, "/metrics") as any)
+  .get("/health", routeHandler(route_health_get, "/health") as any)
+  .get("/users/:userId/visits/:visitId", routeHandler(route_users_param_userId_visits_param_visitId_get, "/users/:userId/visits/:visitId") as any)
+  .get("/users/:userId/visits", routeHandler(route_users_param_userId_visits_get, "/users/:userId/visits") as any)
+  .delete("/users/:userId", routeHandler(route_users_param_userId_delete, "/users/:userId") as any)
+  .get("/users/:userId", routeHandler(route_users_param_userId_get, "/users/:userId") as any)
+  .put("/users/:userId", routeHandler(route_users_param_userId_put, "/users/:userId") as any)
+  .get("/users", routeHandler(route_users_index_get, "/users") as any)
+  .post("/users", routeHandler(route_users_index_post, "/users") as any)
 ;
 
 export type AppType = typeof app;

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { routeImportName } from "../codegen/manifest.ts";
 import type { HttpMethod } from "../core/types.ts";
 
 // ---------------------------------------------------------------------------
@@ -32,9 +33,9 @@ export function generateClientCode(options: GenerateClientOptions): string {
   lines.push("");
 
   // Import each route file to extract its schema types
-  routes.forEach((route, i) => {
+  routes.forEach((route) => {
     const importPath = toRelativeImport(outDir, route.filePath);
-    lines.push(`import type route${i} from "${importPath}";`);
+    lines.push(`import type ${routeImportName(route, routesDir)} from "${importPath}";`);
   });
 
   lines.push("");
@@ -60,7 +61,7 @@ export function generateClientCode(options: GenerateClientOptions): string {
 
   for (let i = 0; i < routes.length; i++) {
     const route = routes[i]!;
-    const routeType = `typeof route${i}`;
+    const routeType = `typeof ${routeImportName(route, routesDir)}`;
     const schemas = `InferSchema<${routeType}>`;
 
     lines.push(`  "${route.method} ${route.urlPath}": {`);
