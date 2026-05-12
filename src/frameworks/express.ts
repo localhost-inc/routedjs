@@ -17,9 +17,9 @@ import {
 import { getResponseSchemaForStatus } from "../core/responses.ts";
 import { validateSchema } from "../core/validate.ts";
 import {
+  createMiddlewareImportNameMap,
+  createRouteImportNameMap,
   generateManifestSource,
-  middlewareImportName,
-  routeImportName,
 } from "../codegen/manifest.ts";
 import {
   applyResponseHeaders,
@@ -284,14 +284,17 @@ export async function generateTypedApp(input: {
   lines.push("export const app = express();");
   lines.push("");
 
+  const middlewareImportNames = createMiddlewareImportNameMap(middlewares, routesDir);
+  const routeImportNames = createRouteImportNameMap(routes, routesDir);
+
   middlewares.forEach((mw) => {
     const usePath = dirToUsePath(path, mw.directory);
-    lines.push(`app.use("${usePath}", wrapMiddleware(${middlewareImportName(mw, routesDir)}));`);
+    lines.push(`app.use("${usePath}", wrapMiddleware(${middlewareImportNames.get(mw.filePath)!}));`);
   });
 
   routes.forEach((route) => {
     const expressPath = route.urlPath.replace(/:(\w+)\*/g, "*$1");
-    lines.push(`app.${route.method}("${expressPath}", routeHandler(${routeImportName(route, routesDir)}, "${route.urlPath}"));`);
+    lines.push(`app.${route.method}("${expressPath}", routeHandler(${routeImportNames.get(route.filePath)!}, "${route.urlPath}"));`);
   });
 
   lines.push("");

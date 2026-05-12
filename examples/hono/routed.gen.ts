@@ -3,96 +3,96 @@ import { defineRouteTree } from "routedjs";
 import { Hono } from "hono";
 import { routeHandler, wrapMiddleware } from "routedjs/hono";
 
-import middleware_root from "./routes/_middleware.ts";
-import middleware_users from "./routes/users/_middleware.ts";
+import middlewareRoot from "./routes/_middleware.ts";
+import middlewareUsers from "./routes/users/_middleware.ts";
 
-import route_group_internal_metrics_get from "./routes/_internal/metrics.get.route.ts";
-import route_health_get from "./routes/health.get.route.ts";
-import route_users_param_userId_visits_param_visitId_get from "./routes/users/$userId/visits/$visitId.get.route.ts";
-import route_users_param_userId_visits_get from "./routes/users/$userId/visits.get.route.ts";
-import route_users_param_userId_delete from "./routes/users/$userId.delete.route.ts";
-import route_users_param_userId_get from "./routes/users/$userId.get.route.ts";
-import route_users_param_userId_put from "./routes/users/$userId.put.route.ts";
-import route_users_index_get from "./routes/users/index.get.route.ts";
-import route_users_index_post from "./routes/users/index.post.route.ts";
-import route_me_index_get from "./routes/me/index.get.route.ts";
+import routeMetricsGet from "./routes/_internal/metrics.get.route.ts";
+import routeHealthGet from "./routes/health.get.route.ts";
+import routeUsersParamUserIdVisitsParamVisitIdGet from "./routes/users/$userId/visits/$visitId.get.route.ts";
+import routeUsersParamUserIdVisitsGet from "./routes/users/$userId/visits.get.route.ts";
+import routeUsersParamUserIdDelete from "./routes/users/$userId.delete.route.ts";
+import routeUsersParamUserIdGet from "./routes/users/$userId.get.route.ts";
+import routeUsersParamUserIdPut from "./routes/users/$userId.put.route.ts";
+import routeUsersGet from "./routes/users/index.get.route.ts";
+import routeUsersPost from "./routes/users/index.post.route.ts";
+import routeMeGet from "./routes/me/index.get.route.ts";
 
 export const routeTree = defineRouteTree([
   {
     path: "/metrics",
     method: "get",
-    route: route_group_internal_metrics_get,
-    middleware: [middleware_root],
+    route: routeMetricsGet,
+    middleware: [middlewareRoot],
   },
   {
     path: "/health",
     method: "get",
-    route: route_health_get,
-    middleware: [middleware_root],
+    route: routeHealthGet,
+    middleware: [middlewareRoot],
   },
   {
     path: "/users/:userId/visits/:visitId",
     method: "get",
-    route: route_users_param_userId_visits_param_visitId_get,
-    middleware: [middleware_root, middleware_users],
+    route: routeUsersParamUserIdVisitsParamVisitIdGet,
+    middleware: [middlewareRoot, middlewareUsers],
   },
   {
     path: "/users/:userId/visits",
     method: "get",
-    route: route_users_param_userId_visits_get,
-    middleware: [middleware_root, middleware_users],
+    route: routeUsersParamUserIdVisitsGet,
+    middleware: [middlewareRoot, middlewareUsers],
   },
   {
     path: "/users/:userId",
     method: "delete",
-    route: route_users_param_userId_delete,
-    middleware: [middleware_root, middleware_users],
+    route: routeUsersParamUserIdDelete,
+    middleware: [middlewareRoot, middlewareUsers],
   },
   {
     path: "/users/:userId",
     method: "get",
-    route: route_users_param_userId_get,
-    middleware: [middleware_root, middleware_users],
+    route: routeUsersParamUserIdGet,
+    middleware: [middlewareRoot, middlewareUsers],
   },
   {
     path: "/users/:userId",
     method: "put",
-    route: route_users_param_userId_put,
-    middleware: [middleware_root, middleware_users],
+    route: routeUsersParamUserIdPut,
+    middleware: [middlewareRoot, middlewareUsers],
   },
   {
     path: "/users",
     method: "get",
-    route: route_users_index_get,
-    middleware: [middleware_root, middleware_users],
+    route: routeUsersGet,
+    middleware: [middlewareRoot, middlewareUsers],
   },
   {
     path: "/users",
     method: "post",
-    route: route_users_index_post,
-    middleware: [middleware_root, middleware_users],
+    route: routeUsersPost,
+    middleware: [middlewareRoot, middlewareUsers],
   },
   {
     path: "/me",
     method: "get",
-    route: route_me_index_get,
-    middleware: [middleware_root],
+    route: routeMeGet,
+    middleware: [middlewareRoot],
   },
 ]);
 
 export const app = new Hono()
-  .use("*", wrapMiddleware(middleware_root))
-  .use("/users/*", wrapMiddleware(middleware_users))
-  .get("/metrics", routeHandler(route_group_internal_metrics_get, "/metrics"))
-  .get("/health", routeHandler(route_health_get, "/health"))
-  .get("/users/:userId/visits/:visitId", routeHandler(route_users_param_userId_visits_param_visitId_get, "/users/:userId/visits/:visitId"))
-  .get("/users/:userId/visits", routeHandler(route_users_param_userId_visits_get, "/users/:userId/visits"))
-  .delete("/users/:userId", routeHandler(route_users_param_userId_delete, "/users/:userId"))
-  .get("/users/:userId", routeHandler(route_users_param_userId_get, "/users/:userId"))
-  .put("/users/:userId", routeHandler(route_users_param_userId_put, "/users/:userId"))
-  .get("/users", routeHandler(route_users_index_get, "/users"))
-  .post("/users", routeHandler(route_users_index_post, "/users"))
-  .get("/me", routeHandler(route_me_index_get, "/me"))
+  .use("*", wrapMiddleware(middlewareRoot))
+  .use("/users/*", wrapMiddleware(middlewareUsers))
+  .get("/metrics", routeHandler(routeMetricsGet, "/metrics"))
+  .get("/health", routeHandler(routeHealthGet, "/health"))
+  .get("/users/:userId/visits/:visitId", routeHandler(routeUsersParamUserIdVisitsParamVisitIdGet, "/users/:userId/visits/:visitId"))
+  .get("/users/:userId/visits", routeHandler(routeUsersParamUserIdVisitsGet, "/users/:userId/visits"))
+  .delete("/users/:userId", routeHandler(routeUsersParamUserIdDelete, "/users/:userId"))
+  .get("/users/:userId", routeHandler(routeUsersParamUserIdGet, "/users/:userId"))
+  .put("/users/:userId", routeHandler(routeUsersParamUserIdPut, "/users/:userId"))
+  .get("/users", routeHandler(routeUsersGet, "/users"))
+  .post("/users", routeHandler(routeUsersPost, "/users"))
+  .get("/me", routeHandler(routeMeGet, "/me"))
 ;
 
 export type AppType = typeof app;

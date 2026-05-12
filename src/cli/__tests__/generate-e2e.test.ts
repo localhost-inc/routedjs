@@ -69,9 +69,9 @@ describe("generate (end-to-end)", () => {
     expect(content).toContain('import { defineRouteTree } from "routedjs"');
 
     // Imports all three route files
-    expect(content).toContain("import route_index_get");
-    expect(content).toContain("import route_users_index_get");
-    expect(content).toContain("import route_users_index_post");
+    expect(content).toContain("import routeRootGet");
+    expect(content).toContain("import routeUsersGet");
+    expect(content).toContain("import routeUsersPost");
 
     // Contains correct paths
     expect(content).toContain('path: "/"');
@@ -101,11 +101,11 @@ describe("generate (end-to-end)", () => {
     const content = await readFile(outFile, "utf-8");
 
     // Has middleware import
-    expect(content).toContain("import middleware_root");
+    expect(content).toContain("import middlewareRoot");
     expect(content).toContain("_middleware.ts");
 
     // Both routes get the root middleware
-    expect(content).toContain("middleware: [middleware_root]");
+    expect(content).toContain("middleware: [middlewareRoot]");
     // No routes should have empty middleware since root middleware applies to all
     expect(content).not.toContain("middleware: []");
   });
@@ -131,8 +131,8 @@ describe("generate (end-to-end)", () => {
     const content = await readFile(outFile, "utf-8");
 
     // Both middleware imports exist
-    expect(content).toContain("import middleware_root");
-    expect(content).toContain("import middleware_users");
+    expect(content).toContain("import middlewareRoot");
+    expect(content).toContain("import middlewareUsers");
 
     // Parse the entries to check middleware association
     // Root route (/) gets only root middleware
@@ -153,22 +153,22 @@ describe("generate (end-to-end)", () => {
     // Root route gets only root middleware
     const rootEntry = entries.find((e) => e.path === "/");
     expect(rootEntry).toBeDefined();
-    expect(rootEntry!.middleware).toContain("middleware_root");
-    expect(rootEntry!.middleware).not.toContain("middleware_users");
+    expect(rootEntry!.middleware).toContain("middlewareRoot");
+    expect(rootEntry!.middleware).not.toContain("middlewareUsers");
 
     // /users route gets both middlewares
     const usersEntry = entries.find(
       (e) => e.path === "/users",
     );
     expect(usersEntry).toBeDefined();
-    expect(usersEntry!.middleware).toContain("middleware_root");
-    expect(usersEntry!.middleware).toContain("middleware_users");
+    expect(usersEntry!.middleware).toContain("middlewareRoot");
+    expect(usersEntry!.middleware).toContain("middlewareUsers");
 
     // /users/:userId route also gets both middlewares
     const userIdEntry = entries.find((e) => e.path === "/users/:userId");
     expect(userIdEntry).toBeDefined();
-    expect(userIdEntry!.middleware).toContain("middleware_root");
-    expect(userIdEntry!.middleware).toContain("middleware_users");
+    expect(userIdEntry!.middleware).toContain("middlewareRoot");
+    expect(userIdEntry!.middleware).toContain("middlewareUsers");
   });
 
   test("empty routes directory produces empty route tree", async () => {
@@ -210,8 +210,8 @@ describe("generate (end-to-end)", () => {
     const after = await readFile(outFile, "utf-8");
 
     const existingImports = [
-      'import route_health_get from "./routes/health.get.route.ts";',
-      'import route_users_param_userId_get from "./routes/users/$userId.get.route.ts";',
+      'import routeHealthGet from "./routes/health.get.route.ts";',
+      'import routeUsersParamUserIdGet from "./routes/users/$userId.get.route.ts";',
     ];
 
     for (const importLine of existingImports) {
@@ -220,9 +220,32 @@ describe("generate (end-to-end)", () => {
     }
 
     expect(after).toContain(
-      'import route_users_activity_get from "./routes/users/activity.get.route.ts";',
+      'import routeUsersActivityGet from "./routes/users/activity.get.route.ts";',
     );
     expect(after).not.toContain("import route0");
+  });
+
+  test("route import names fall back to file path only for name collisions", async () => {
+    const routesDir = path.join(tmpDir, "routes");
+    const outFile = path.join(tmpDir, "manifest.ts");
+
+    await writeRouteFile(routesDir, "users.get.route.ts");
+    await writeRouteFile(routesDir, "users/index.get.route.ts");
+    await writeRouteFile(routesDir, "users/index.post.route.ts");
+
+    await generate({ routesDir, outFile });
+
+    const content = await readFile(outFile, "utf-8");
+
+    expect(content).toContain(
+      'import routeUsersGetFromUsersGet from "./routes/users.get.route.ts";',
+    );
+    expect(content).toContain(
+      'import routeUsersGetFromUsersIndexGet from "./routes/users/index.get.route.ts";',
+    );
+    expect(content).toContain(
+      'import routeUsersPost from "./routes/users/index.post.route.ts";',
+    );
   });
 
   test("pathless groups (_prefix dirs) don't add to URL path", async () => {
@@ -406,13 +429,13 @@ describe("generate (end-to-end)", () => {
     expect(content).toContain('import { Hono } from "hono"');
     expect(content).toContain('import { routeHandler, wrapMiddleware } from "routedjs/hono"');
     expect(content).toContain("export const routeTree = defineRouteTree([");
-    expect(content).toContain('.use("*", wrapMiddleware(middleware_root))');
-    expect(content).toContain('.use("/users/admin/*", wrapMiddleware(middleware_users_admin))');
+    expect(content).toContain('.use("*", wrapMiddleware(middlewareRoot))');
+    expect(content).toContain('.use("/users/admin/*", wrapMiddleware(middlewareUsersAdmin))');
     expect(content).toContain(
-      '.get("/storage/:path{.+}", routeHandler(route_storage_catchAll_path_get, "/storage/:path*"))',
+      '.get("/storage/:path{.+}", routeHandler(routeStorageCatchAllPathGet, "/storage/:path*"))',
     );
     expect(content).toContain(
-      '.get("/users/admin/:userId", routeHandler(route_users_admin_param_userId_get, "/users/admin/:userId"))',
+      '.get("/users/admin/:userId", routeHandler(routeUsersAdminParamUserIdGet, "/users/admin/:userId"))',
     );
     expect(content).toContain("export type AppType = typeof app;");
   });

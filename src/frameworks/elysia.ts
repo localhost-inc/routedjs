@@ -11,8 +11,8 @@ import {
 import { getResponseSchemaForStatus } from "../core/responses.ts";
 import { validateSchema } from "../core/validate.ts";
 import {
+  createRouteImportNameMap,
   generateManifestSource,
-  routeImportName,
 } from "../codegen/manifest.ts";
 import type {
   MiddlewareDefinition,
@@ -340,9 +340,11 @@ export async function generateTypedApp(input: {
 
   lines.push("export const app = new Elysia()");
 
+  const routeImportNames = createRouteImportNameMap(routes, routesDir);
+
   routes.forEach((route) => {
     const elysiaPath = route.urlPath.replace(/:(\w+)\*/g, "*");
-    lines.push(`  .${route.method}("${elysiaPath}", routeHandler(${routeImportName(route, routesDir)}, "${route.urlPath}") as any)`);
+    lines.push(`  .${route.method}("${elysiaPath}", routeHandler(${routeImportNames.get(route.filePath)!}, "${route.urlPath}") as any)`);
   });
 
   lines.push(";");

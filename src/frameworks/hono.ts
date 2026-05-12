@@ -18,9 +18,9 @@ import {
 import { getResponseSchemaForStatus } from "../core/responses.ts";
 import { validateSchema } from "../core/validate.ts";
 import {
+  createMiddlewareImportNameMap,
+  createRouteImportNameMap,
   generateManifestSource,
-  middlewareImportName,
-  routeImportName,
 } from "../codegen/manifest.ts";
 import type {
   InferSchemaInput,
@@ -436,16 +436,19 @@ export async function generateTypedApp(input: GenerateTypedAppInput): Promise<st
 
   lines.push("export const app = new Hono()");
 
+  const middlewareImportNames = createMiddlewareImportNameMap(middlewares, routesDir);
+  const routeImportNames = createRouteImportNameMap(routes, routesDir);
+
   for (const mw of middlewares) {
     const usePaths = resolveMiddlewareUsePaths(path, mw, routes);
     for (const usePath of usePaths) {
-      lines.push(`  .use("${usePath}", wrapMiddleware(${middlewareImportName(mw, routesDir)}))`);
+      lines.push(`  .use("${usePath}", wrapMiddleware(${middlewareImportNames.get(mw.filePath)!}))`);
     }
   }
 
   routes.forEach((route) => {
     lines.push(
-      `  .${route.method}("${translateRoutePathForHono(route.urlPath)}", routeHandler(${routeImportName(route, routesDir)}, "${route.urlPath}"))`,
+      `  .${route.method}("${translateRoutePathForHono(route.urlPath)}", routeHandler(${routeImportNames.get(route.filePath)!}, "${route.urlPath}"))`,
     );
   });
 
