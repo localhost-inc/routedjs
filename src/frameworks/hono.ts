@@ -17,7 +17,11 @@ import {
 } from "../core/path.ts";
 import { getResponseSchemaForStatus } from "../core/responses.ts";
 import { validateSchema } from "../core/validate.ts";
-import { generateManifestSource } from "../codegen/manifest.ts";
+import {
+  createMiddlewareImportNameMap,
+  createRouteImportNameMap,
+  generateManifestSource,
+} from "../codegen/manifest.ts";
 import type {
   InferSchemaInput,
   InferSchemaOutput,
@@ -432,17 +436,19 @@ export async function generateTypedApp(input: GenerateTypedAppInput): Promise<st
 
   lines.push("export const app = new Hono()");
 
-  for (let index = 0; index < middlewares.length; index++) {
-    const mw = middlewares[index]!;
+  const middlewareImportNames = createMiddlewareImportNameMap(middlewares, routesDir);
+  const routeImportNames = createRouteImportNameMap(routes, routesDir);
+
+  for (const mw of middlewares) {
     const usePaths = resolveMiddlewareUsePaths(path, mw, routes);
     for (const usePath of usePaths) {
-      lines.push(`  .use("${usePath}", wrapMiddleware(middleware${index}))`);
+      lines.push(`  .use("${usePath}", wrapMiddleware(${middlewareImportNames.get(mw.filePath)!}))`);
     }
   }
 
-  routes.forEach((route, index) => {
+  routes.forEach((route) => {
     lines.push(
-      `  .${route.method}("${translateRoutePathForHono(route.urlPath)}", routeHandler(route${index}, "${route.urlPath}"))`,
+      `  .${route.method}("${translateRoutePathForHono(route.urlPath)}", routeHandler(${routeImportNames.get(route.filePath)!}, "${route.urlPath}"))`,
     );
   });
 

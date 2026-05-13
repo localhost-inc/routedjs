@@ -26,11 +26,11 @@ describe("generateClientCode", () => {
     expect(code).toContain('import { createClient, type RouteMap, type Client, type ClientOptions } from "routedjs/client"');
 
     // Imports route types
-    expect(code).toContain("import type route0 from");
-    expect(code).toContain("import type route1 from");
-    expect(code).toContain("import type route2 from");
-    expect(code).toContain("import type route3 from");
-    expect(code).toContain("import type route4 from");
+    expect(code).toContain("import type routeHealthGet from");
+    expect(code).toContain("import type routeUsersGet from");
+    expect(code).toContain("import type routeUsersPost from");
+    expect(code).toContain("import type routeUsersParamUserIdGet from");
+    expect(code).toContain("import type routeStorageCatchAllPathGet from");
 
     // Generates route map entries
     expect(code).toContain('"get /health"');
@@ -39,7 +39,7 @@ describe("generateClientCode", () => {
     expect(code).toContain('"get /users/:userId"');
     expect(code).toContain('"get /storage/:path*"');
     expect(code).toContain("type PrimarySuccessResponse<T> =");
-    expect(code).toContain('response: SchemaType<InferSchema<typeof route0> extends { responses: infer R } ? PrimarySuccessResponse<R> : InferSchema<typeof route0> extends { response: infer R } ? R : undefined>;');
+    expect(code).toContain('response: SchemaType<InferSchema<typeof routeHealthGet> extends { responses: infer R } ? PrimarySuccessResponse<R> : InferSchema<typeof routeHealthGet> extends { response: infer R } ? R : undefined>;');
 
     // Exports createApiClient factory
     expect(code).toContain("export function createApiClient");

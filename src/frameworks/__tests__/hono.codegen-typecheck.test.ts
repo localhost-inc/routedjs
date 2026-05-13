@@ -22,21 +22,38 @@ async function writeRoute(
 }
 
 async function runTsc(entryFile: string): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const tsconfigFile = path.join(path.dirname(entryFile), "tsconfig.json");
+  await writeFile(
+    tsconfigFile,
+    JSON.stringify(
+      {
+        compilerOptions: {
+          module: "preserve",
+          moduleResolution: "bundler",
+          target: "ESNext",
+          allowImportingTsExtensions: true,
+          verbatimModuleSyntax: true,
+          strict: true,
+          skipLibCheck: true,
+          baseUrl: repoRoot,
+          paths: {
+            routedjs: ["./src/index.ts"],
+            "routedjs/hono": ["./src/frameworks/hono.ts"],
+          },
+        },
+        files: [path.basename(entryFile)],
+      },
+      null,
+      2,
+    ),
+  );
+
   const proc = Bun.spawn(
     [
       "./node_modules/.bin/tsc",
       "--noEmit",
-      "--module",
-      "preserve",
-      "--moduleResolution",
-      "bundler",
-      "--target",
-      "ESNext",
-      "--allowImportingTsExtensions",
-      "--verbatimModuleSyntax",
-      "--strict",
-      "--skipLibCheck",
-      entryFile,
+      "--project",
+      tsconfigFile,
     ],
     {
       cwd: repoRoot,

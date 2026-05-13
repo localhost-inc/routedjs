@@ -77,19 +77,19 @@ This scans your routes directory and writes `routed.gen.ts` with both the shared
 import { defineRouteTree } from "routedjs";
 import { Hono } from "hono";
 import { routeHandler, wrapMiddleware } from "routedjs/hono";
-import route0 from "./routes/users/$userId.get.route.ts";
+import routeUsersParamUserIdGet from "./routes/users/$userId.get.route.ts";
 
 export const routeTree = defineRouteTree([
   {
     path: "/users/:userId",
     method: "get",
-    route: route0,
+    route: routeUsersParamUserIdGet,
     middleware: [],
   },
 ]);
 
 export const app = new Hono()
-  .get("/users/:userId", routeHandler(route0, "/users/:userId"));
+  .get("/users/:userId", routeHandler(routeUsersParamUserIdGet, "/users/:userId"));
 
 export type AppType = typeof app;
 ```

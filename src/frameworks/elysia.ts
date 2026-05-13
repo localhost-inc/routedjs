@@ -10,7 +10,10 @@ import {
 } from "../core/path.ts";
 import { getResponseSchemaForStatus } from "../core/responses.ts";
 import { validateSchema } from "../core/validate.ts";
-import { generateManifestSource } from "../codegen/manifest.ts";
+import {
+  createRouteImportNameMap,
+  generateManifestSource,
+} from "../codegen/manifest.ts";
 import type {
   MiddlewareDefinition,
   RouteDefinition,
@@ -337,9 +340,11 @@ export async function generateTypedApp(input: {
 
   lines.push("export const app = new Elysia()");
 
-  routes.forEach((route, i) => {
+  const routeImportNames = createRouteImportNameMap(routes, routesDir);
+
+  routes.forEach((route) => {
     const elysiaPath = route.urlPath.replace(/:(\w+)\*/g, "*");
-    lines.push(`  .${route.method}("${elysiaPath}", routeHandler(route${i}, "${route.urlPath}") as any)`);
+    lines.push(`  .${route.method}("${elysiaPath}", routeHandler(${routeImportNames.get(route.filePath)!}, "${route.urlPath}") as any)`);
   });
 
   lines.push(";");

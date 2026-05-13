@@ -10,7 +10,11 @@ import {
 } from "../core/path.ts";
 import { getResponseSchemaForStatus } from "../core/responses.ts";
 import { validateSchema } from "../core/validate.ts";
-import { generateManifestSource } from "../codegen/manifest.ts";
+import {
+  createMiddlewareImportNameMap,
+  createRouteImportNameMap,
+  generateManifestSource,
+} from "../codegen/manifest.ts";
 import {
   applyResponseHeaders,
   NodeRequestState,
@@ -339,12 +343,15 @@ export async function generateTypedApp(input: {
   lines.push("export const app = new Koa();");
   lines.push("");
 
-  middlewares.forEach((mw, i) => {
-    lines.push(`app.use(wrapMiddleware(middleware${i}));`);
+  const middlewareImportNames = createMiddlewareImportNameMap(middlewares, routesDir);
+  const routeImportNames = createRouteImportNameMap(routes, routesDir);
+
+  middlewares.forEach((mw) => {
+    lines.push(`app.use(wrapMiddleware(${middlewareImportNames.get(mw.filePath)!}));`);
   });
 
-  routes.forEach((route, i) => {
-    lines.push(`app.use(routeHandler(route${i}, "${route.urlPath}", "${route.method}"));`);
+  routes.forEach((route) => {
+    lines.push(`app.use(routeHandler(${routeImportNames.get(route.filePath)!}, "${route.urlPath}", "${route.method}"));`);
   });
 
   lines.push("");

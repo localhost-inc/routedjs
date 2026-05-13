@@ -3,94 +3,94 @@ import { defineRouteTree } from "routedjs";
 import express from "express";
 import { routeHandler, wrapMiddleware } from "routedjs/express";
 
-import middleware0 from "./routes/_middleware.ts";
-import middleware1 from "./routes/users/_middleware.ts";
+import middlewareRoot from "./routes/_middleware.ts";
+import middlewareUsers from "./routes/users/_middleware.ts";
 
-import route0 from "./routes/_internal/metrics.get.route.ts";
-import route1 from "./routes/health.get.route.ts";
-import route2 from "./routes/users/$userId/visits/$visitId.get.route.ts";
-import route3 from "./routes/users/$userId/visits.get.route.ts";
-import route4 from "./routes/users/$userId.delete.route.ts";
-import route5 from "./routes/users/$userId.get.route.ts";
-import route6 from "./routes/users/$userId.put.route.ts";
-import route7 from "./routes/users/index.get.route.ts";
-import route8 from "./routes/users/index.post.route.ts";
-import route9 from "./routes/me/index.get.route.ts";
+import routeMetricsGet from "./routes/_internal/metrics.get.route.ts";
+import routeHealthGet from "./routes/health.get.route.ts";
+import routeUsersParamUserIdVisitsParamVisitIdGet from "./routes/users/$userId/visits/$visitId.get.route.ts";
+import routeUsersParamUserIdVisitsGet from "./routes/users/$userId/visits.get.route.ts";
+import routeUsersParamUserIdDelete from "./routes/users/$userId.delete.route.ts";
+import routeUsersParamUserIdGet from "./routes/users/$userId.get.route.ts";
+import routeUsersParamUserIdPut from "./routes/users/$userId.put.route.ts";
+import routeUsersGet from "./routes/users/index.get.route.ts";
+import routeUsersPost from "./routes/users/index.post.route.ts";
+import routeMeGet from "./routes/me/index.get.route.ts";
 
 export const routeTree = defineRouteTree([
   {
     path: "/metrics",
     method: "get",
-    route: route0,
-    middleware: [middleware0],
+    route: routeMetricsGet,
+    middleware: [middlewareRoot],
   },
   {
     path: "/health",
     method: "get",
-    route: route1,
-    middleware: [middleware0],
+    route: routeHealthGet,
+    middleware: [middlewareRoot],
   },
   {
     path: "/users/:userId/visits/:visitId",
     method: "get",
-    route: route2,
-    middleware: [middleware0, middleware1],
+    route: routeUsersParamUserIdVisitsParamVisitIdGet,
+    middleware: [middlewareRoot, middlewareUsers],
   },
   {
     path: "/users/:userId/visits",
     method: "get",
-    route: route3,
-    middleware: [middleware0, middleware1],
+    route: routeUsersParamUserIdVisitsGet,
+    middleware: [middlewareRoot, middlewareUsers],
   },
   {
     path: "/users/:userId",
     method: "delete",
-    route: route4,
-    middleware: [middleware0, middleware1],
+    route: routeUsersParamUserIdDelete,
+    middleware: [middlewareRoot, middlewareUsers],
   },
   {
     path: "/users/:userId",
     method: "get",
-    route: route5,
-    middleware: [middleware0, middleware1],
+    route: routeUsersParamUserIdGet,
+    middleware: [middlewareRoot, middlewareUsers],
   },
   {
     path: "/users/:userId",
     method: "put",
-    route: route6,
-    middleware: [middleware0, middleware1],
+    route: routeUsersParamUserIdPut,
+    middleware: [middlewareRoot, middlewareUsers],
   },
   {
     path: "/users",
     method: "get",
-    route: route7,
-    middleware: [middleware0, middleware1],
+    route: routeUsersGet,
+    middleware: [middlewareRoot, middlewareUsers],
   },
   {
     path: "/users",
     method: "post",
-    route: route8,
-    middleware: [middleware0, middleware1],
+    route: routeUsersPost,
+    middleware: [middlewareRoot, middlewareUsers],
   },
   {
     path: "/me",
     method: "get",
-    route: route9,
-    middleware: [middleware0],
+    route: routeMeGet,
+    middleware: [middlewareRoot],
   },
 ]);
 
 export const app = express();
 
-app.use("*", wrapMiddleware(middleware0));
-app.use("/users/*", wrapMiddleware(middleware1));
-app.get("/metrics", routeHandler(route0, "/metrics"));
-app.get("/health", routeHandler(route1, "/health"));
-app.get("/users/:userId/visits/:visitId", routeHandler(route2, "/users/:userId/visits/:visitId"));
-app.get("/users/:userId/visits", routeHandler(route3, "/users/:userId/visits"));
-app.delete("/users/:userId", routeHandler(route4, "/users/:userId"));
-app.get("/users/:userId", routeHandler(route5, "/users/:userId"));
-app.put("/users/:userId", routeHandler(route6, "/users/:userId"));
-app.get("/users", routeHandler(route7, "/users"));
-app.post("/users", routeHandler(route8, "/users"));
-app.get("/me", routeHandler(route9, "/me"));
+app.use("*", wrapMiddleware(middlewareRoot));
+app.use("/users/*", wrapMiddleware(middlewareUsers));
+app.get("/metrics", routeHandler(routeMetricsGet, "/metrics"));
+app.get("/health", routeHandler(routeHealthGet, "/health"));
+app.get("/users/:userId/visits/:visitId", routeHandler(routeUsersParamUserIdVisitsParamVisitIdGet, "/users/:userId/visits/:visitId"));
+app.get("/users/:userId/visits", routeHandler(routeUsersParamUserIdVisitsGet, "/users/:userId/visits"));
+app.delete("/users/:userId", routeHandler(routeUsersParamUserIdDelete, "/users/:userId"));
+app.get("/users/:userId", routeHandler(routeUsersParamUserIdGet, "/users/:userId"));
+app.put("/users/:userId", routeHandler(routeUsersParamUserIdPut, "/users/:userId"));
+app.get("/users", routeHandler(routeUsersGet, "/users"));
+app.post("/users", routeHandler(routeUsersPost, "/users"));
+app.get("/me", routeHandler(routeMeGet, "/me"));

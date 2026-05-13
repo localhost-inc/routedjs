@@ -16,7 +16,11 @@ import {
 } from "../core/path.ts";
 import { getResponseSchemaForStatus } from "../core/responses.ts";
 import { validateSchema } from "../core/validate.ts";
-import { generateManifestSource } from "../codegen/manifest.ts";
+import {
+  createMiddlewareImportNameMap,
+  createRouteImportNameMap,
+  generateManifestSource,
+} from "../codegen/manifest.ts";
 import {
   applyResponseHeaders,
   NodeRequestState,
@@ -280,14 +284,17 @@ export async function generateTypedApp(input: {
   lines.push("export const app = express();");
   lines.push("");
 
-  middlewares.forEach((mw, i) => {
+  const middlewareImportNames = createMiddlewareImportNameMap(middlewares, routesDir);
+  const routeImportNames = createRouteImportNameMap(routes, routesDir);
+
+  middlewares.forEach((mw) => {
     const usePath = dirToUsePath(path, mw.directory);
-    lines.push(`app.use("${usePath}", wrapMiddleware(middleware${i}));`);
+    lines.push(`app.use("${usePath}", wrapMiddleware(${middlewareImportNames.get(mw.filePath)!}));`);
   });
 
-  routes.forEach((route, i) => {
+  routes.forEach((route) => {
     const expressPath = route.urlPath.replace(/:(\w+)\*/g, "*$1");
-    lines.push(`app.${route.method}("${expressPath}", routeHandler(route${i}, "${route.urlPath}"));`);
+    lines.push(`app.${route.method}("${expressPath}", routeHandler(${routeImportNames.get(route.filePath)!}, "${route.urlPath}"));`);
   });
 
   lines.push("");
