@@ -2,8 +2,8 @@ name: Publish Package
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -22,12 +22,37 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
 
+      - name: Read package metadata
+        id: package
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const pkg = require("./package.json");
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `name=${pkg.name}\nversion=${pkg.version}\n`);
+          NODE
+
+      - name: Check npm version
+        id: npm
+        run: |
+          package="${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }}"
+          if npm view "$package" version >/dev/null 2>&1; then
+            echo "$package is already published; skipping publish."
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$package is not published yet."
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: oven-sh/setup-bun@v2
+        if: steps.npm.outputs.published != 'true'
         with:
           bun-version: latest
 
       - run: bun install --frozen-lockfile
+        if: steps.npm.outputs.published != 'true'
 
       - run: bun run typecheck
+        if: steps.npm.outputs.published != 'true'
 
       - run: npm publish
+        if: steps.npm.outputs.published != 'true'
