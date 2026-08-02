@@ -129,14 +129,18 @@
     }
   },
   "devDependencies": {
+    "@semantic-release/changelog": "^7.0.0",
+    "@semantic-release/git": "^11.0.1",
     "@types/bun": "latest",
     "@types/express": "^5.0.6",
     "@types/koa": "^3.0.2",
+    "conventional-changelog-conventionalcommits": "^10.2.1",
     "elysia": "^1.4.28",
     "express": "^5.2.1",
     "hono": "4.12.9",
     "koa": "^3.2.0",
     "mitata": "^1.0.34",
+    "semantic-release": "^25.0.8",
     "tsup": "^8.5.1",
     "zod": "^4"
   }
