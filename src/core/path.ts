@@ -106,6 +106,15 @@ export function matchRoutePath(
   return pathIndex === pathSegments.length ? params : null;
 }
 
+export function compareCodePoints(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * Total order: returns 0 only for identical paths. Equally specific paths
+ * fall back to code-point order so generated output is byte-stable across
+ * file systems and locales.
+ */
 export function compareRoutePathSpecificity(a: string, b: string): number {
   const aSegments = splitRoutePath(a);
   const bSegments = splitRoutePath(b);
@@ -121,9 +130,12 @@ export function compareRoutePathSpecificity(a: string, b: string): number {
     const rankDiff = getSegmentRank(bSegment) - getSegmentRank(aSegment);
     if (rankDiff !== 0) return rankDiff;
 
-    if (getSegmentRank(aSegment) === 2 && aSegment !== bSegment) {
-      const lengthDiff = bSegment.length - aSegment.length;
-      if (lengthDiff !== 0) return lengthDiff;
+    if (aSegment !== bSegment) {
+      if (getSegmentRank(aSegment) === 2) {
+        const lengthDiff = bSegment.length - aSegment.length;
+        if (lengthDiff !== 0) return lengthDiff;
+      }
+      return compareCodePoints(aSegment, bSegment);
     }
   }
 

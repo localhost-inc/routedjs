@@ -5,7 +5,7 @@ import {
   type CodegenMiddleware,
   type CodegenRoute,
 } from "../codegen/manifest.ts";
-import { compareRoutePathSpecificity } from "../core/path.ts";
+import { compareCodePoints, compareRoutePathSpecificity } from "../core/path.ts";
 import { HTTP_METHODS, type HttpMethod } from "../core/types.ts";
 
 // ---------------------------------------------------------------------------
@@ -134,8 +134,15 @@ async function scanRoutes(routesDir: string): Promise<ScannedRoute[]> {
   }
 
   // Sort by route specificity so generated registration order matches runtime matching:
-  // static segments before params, params before splats, then method for stability.
-  routes.sort((a, b) => compareRoutePathSpecificity(a.urlPath, b.urlPath) || a.method.localeCompare(b.method));
+  // static segments before params, params before splats, then method. The final
+  // filePath tiebreak covers pathless groups mapping two files to one path+method,
+  // so output never depends on file-system scan order.
+  routes.sort(
+    (a, b) =>
+      compareRoutePathSpecificity(a.urlPath, b.urlPath) ||
+      compareCodePoints(a.method, b.method) ||
+      compareCodePoints(a.filePath, b.filePath),
+  );
 
   return routes;
 }
@@ -156,7 +163,7 @@ async function scanMiddleware(routesDir: string): Promise<InternalScannedMiddlew
   middlewares.sort((a, b) => {
     const depthA = a.directory === "." ? 0 : a.directory.split(path.sep).length;
     const depthB = b.directory === "." ? 0 : b.directory.split(path.sep).length;
-    return depthA - depthB || a.directory.localeCompare(b.directory);
+    return depthA - depthB || compareCodePoints(a.directory, b.directory);
   });
 
   return middlewares;

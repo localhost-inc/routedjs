@@ -33,4 +33,19 @@ describe("path helpers", () => {
       "/workspaces",
     ]);
   });
+
+  test("compareRoutePathSpecificity totally orders equally specific paths", () => {
+    // Same-length static segments and differing param names used to compare
+    // as equal, leaving the order up to file-system scan order.
+    expect(compareRoutePathSpecificity("/users/:id", "/teams/:id")).toBeGreaterThan(0);
+    expect(compareRoutePathSpecificity("/teams/:id", "/users/:id")).toBeLessThan(0);
+    expect(compareRoutePathSpecificity("/users/:id", "/users/:name")).toBeLessThan(0);
+    expect(compareRoutePathSpecificity("/users/:id", "/users/:id")).toBe(0);
+
+    const shuffled = ["/users/:id", "/posts/:id", "/teams/:id", "/roles/:id"];
+    const reversed = [...shuffled].reverse();
+    expect([...shuffled].sort(compareRoutePathSpecificity)).toEqual(
+      [...reversed].sort(compareRoutePathSpecificity),
+    );
+  });
 });
